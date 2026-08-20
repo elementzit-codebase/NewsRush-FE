@@ -21,9 +21,6 @@ import { printCapacityFor } from '../lib/capacity'
 
 const AUTOSAVE_MS = 2000
 
-/** Ceiling for the auto-growing body box, so the panel stays navigable. */
-const MAX_BODY_INPUT_PX = 900
-
 /** Builds the local map the editor edits, seeded from whatever the server has. */
 function toSectionMap(saved = []) {
   const map = {}
@@ -82,7 +79,6 @@ export default function CreateTask() {
   // rather than waiting for a re-render.
   const cancelFillRef = useRef(false)
   const failedFillRef = useRef([])
-  const bodyInputRef = useRef(null)
 
   const page = PAGES[pageIndex]
   const block = useMemo(() => blockFor(activeKey) ?? ALL_BLOCKS[0], [activeKey])
@@ -170,16 +166,6 @@ export default function CreateTask() {
 
   // Never leave an edit stranded in the debounce window.
   useEffect(() => () => clearTimeout(timerRef.current), [])
-
-  // Grow the body box to its content so a full-length section can be read
-  // without scrolling a small window, capped so the panel stays usable. Runs on
-  // section changes too, since switching sections replaces the text wholesale.
-  useEffect(() => {
-    const el = bodyInputRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, MAX_BODY_INPUT_PX)}px`
-  }, [activeKey, activeSection.content])
 
   // Wrapped so the memoised canvas keeps a stable prop and does not re-render
   // every time the recorder reports a new level.
@@ -661,7 +647,6 @@ export default function CreateTask() {
                     mid-phrase cannot bake the interim text into the content and
                     duplicate it when the final result lands. */}
                 <textarea
-                  ref={bodyInputRef}
                   value={activeSection.content}
                   onChange={(e) =>
                     editSection(activeKey, { content: e.target.value.slice(0, charLimit) })
@@ -669,7 +654,7 @@ export default function CreateTask() {
                   placeholder="Type the section body, or dictate it..."
                   rows={11}
                   aria-label={'Body text for ' + block.section_name}
-                  className="scroll-thin w-full resize-y bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
+                  className="scroll-thin h-[260px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
                 />
                 {speech.interim && (
                   <p className="text-[15px] leading-relaxed text-slate-400 italic">
