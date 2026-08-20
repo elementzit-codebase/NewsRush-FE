@@ -15,6 +15,7 @@ import {
 import { ALL_BLOCKS, PAGES, TOTAL_SECTIONS, blockFor } from '../data/sections'
 import * as api from '../lib/api'
 import { useSpeechRecognition } from '../lib/useSpeechRecognition'
+import { useMicLevel } from '../lib/useMicLevel'
 
 const AUTOSAVE_MS = 2000
 
@@ -175,6 +176,9 @@ export default function CreateTask() {
   // The hook holds `onResult` in a ref, so passing a fresh closure each render
   // picks up the current section without restarting recognition.
   const speech = useSpeechRecognition({ onResult: appendPhrase })
+
+  // Runs alongside recognition purely to show that audio is arriving.
+  const mic = useMicLevel(speech.listening)
 
   /* ------------------------------------------------------------------ ai */
 
@@ -473,8 +477,12 @@ export default function CreateTask() {
               </div>
 
               <div className="mt-3 rounded-xl border border-line bg-white p-4">
+                {/* The textarea holds only saved text. An in-progress phrase is
+                    shown beneath it instead of inside the value, so typing
+                    mid-phrase cannot bake the interim text into the content and
+                    duplicate it when the final result lands. */}
                 <textarea
-                  value={activeSection.content + (speech.interim ? ' ' + speech.interim : '')}
+                  value={activeSection.content}
                   onChange={(e) =>
                     editSection(activeKey, { content: e.target.value.slice(0, charLimit) })
                   }
@@ -483,36 +491,66 @@ export default function CreateTask() {
                   aria-label={'Body text for ' + block.section_name}
                   className="w-full resize-none bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
                 />
+                {speech.interim && (
+                  <p className="text-[15px] leading-relaxed text-slate-400 italic">
+                    {speech.interim}
+                  </p>
+                )}
                 <p className="text-right text-[13px] text-muted">
                   {activeSection.content.length}/{charLimit}
                 </p>
               </div>
 
-              <div className="mt-4 flex items-center gap-4 rounded-xl border border-line bg-white px-4 py-3">
-                <button
-                  type="button"
-                  onClick={speech.toggle}
-                  aria-label={speech.listening ? 'Stop recording' : 'Start recording'}
-                  aria-pressed={speech.listening}
-                  className={[
-                    'grid size-12 shrink-0 place-items-center rounded-full text-white transition',
-                    speech.listening ? 'bg-red-500 hover:bg-red-600' : 'bg-brand-500 hover:bg-brand-600',
-                  ].join(' ')}
-                >
-                  <MicIcon className="size-6" />
-                </button>
-                <Waveform
-                  bars={30}
-                  animated={speech.listening}
-                  className="flex-1"
-                  color={speech.listening ? 'bg-brand-500' : 'bg-slate-300'}
-                />
-                <span className="shrink-0 text-[15px] tabular-nums text-muted">{speech.elapsed}</span>
-              </div>
+              {tab === 'voice' &&
+                (speech.supported ? (
+                  <>
+                    <div className="mt-4 flex items-center gap-4 rounded-xl border border-line bg-white px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={speech.toggle}
+                        aria-label={speech.listening ? 'Stop recording' : 'Start recording'}
+                        aria-pressed={speech.listening}
+                        className={[
+                          'grid size-12 shrink-0 place-items-center rounded-full text-white transition',
+                          speech.listening
+                            ? 'bg-red-500 hover:bg-red-600'
+                            : 'bg-brand-500 hover:bg-brand-600',
+                        ].join(' ')}
+                      >
+                        <MicIcon className="size-6" />
+                      </button>
+                      <Waveform
+                        bars={30}
+                        animated={speech.listening}
+                        level={mic.level}
+                        className="flex-1"
+                        color={speech.listening ? 'bg-brand-500' : 'bg-slate-300'}
+                      />
+                      <span className="shrink-0 text-[15px] tabular-nums text-muted">
+                        {speech.elapsed}
+                      </span>
+                    </div>
 
-              {(speech.error || notice) && (
+                    {/* The meter reads the mic directly, so a flat bar while
+                        recording means no audio is arriving at all. */}
+                    {speech.listening && (
+                      <p className="mt-2 text-[13px] text-muted">
+                        {mic.level > 0.02
+                          ? 'Listening — speak normally, text appears as phrases finish.'
+                          : 'No sound detected yet. Check the microphone is unmuted and selected.'}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+                    Voice dictation needs the Web Speech API, which this browser does not provide.
+                    Chrome or Edge support it; Firefox does not. Use the Type Text tab instead.
+                  </p>
+                ))}
+
+              {(speech.error || mic.error || notice) && (
                 <p role="alert" className="mt-3 rounded-lg bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-                  {speech.error || notice}
+                  {speech.error || mic.error || notice}
                 </p>
               )}
 
