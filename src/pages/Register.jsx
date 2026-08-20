@@ -69,7 +69,7 @@ export default function Register() {
             id="first_name"
             label="First name"
             autoComplete="given-name"
-            placeholder="Asha"
+            placeholder="First Name"
             value={form.first_name}
             onChange={update('first_name')}
             required
@@ -79,7 +79,7 @@ export default function Register() {
             id="last_name"
             label="Last name"
             autoComplete="family-name"
-            placeholder="Nair"
+            placeholder="Second Name"
             value={form.last_name}
             onChange={update('last_name')}
             required
@@ -93,7 +93,7 @@ export default function Register() {
           icon={MailIcon}
           type="email"
           autoComplete="email"
-          placeholder="asha.nair@example.com"
+          placeholder="firstname.lastname@example.com"
           value={form.email}
           onChange={update('email')}
           required

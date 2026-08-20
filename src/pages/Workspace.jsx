@@ -19,7 +19,8 @@ import { FILTERS, SORT_OPTIONS } from '../data/editions'
 import * as api from '../lib/api'
 import { useAuth } from '../lib/auth'
 
-const PER_PAGE_OPTIONS = [6, 12, 24]
+// Multiples of the 4-up grid, so the last row is never left part-filled.
+const PER_PAGE_OPTIONS = [8, 12, 24]
 
 /** A section counts as done only with a title, a body and `completed` status. */
 const countCompleted = (sections = []) =>
@@ -40,7 +41,7 @@ export default function Workspace() {
   const [filter, setFilter] = useState('all')
   const [sort, setSort] = useState('latest')
   const [layout, setLayout] = useState('grid')
-  const [perPage, setPerPage] = useState(6)
+  const [perPage, setPerPage] = useState(PER_PAGE_OPTIONS[0])
   const [page, setPage] = useState(1)
 
   const load = useCallback(async () => {
@@ -278,7 +279,7 @@ export default function Workspace() {
             <div
               className={
                 layout === 'grid'
-                  ? 'mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-3'
+                  ? 'mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
                   : 'mt-8 flex flex-col gap-4'
               }
             >
