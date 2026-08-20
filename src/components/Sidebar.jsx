@@ -99,14 +99,14 @@ export default function Sidebar({ variant = 'default', onExpand }) {
         <LogoutIcon className="size-6" />
       </button>
 
-      <button
+      {/* <button
         type="button"
         onClick={onExpand}
         aria-label="Expand sidebar"
         className="grid size-11 place-items-center rounded-full border border-line text-muted transition hover:border-brand-500 hover:text-brand-500"
       >
         <ChevronsRightIcon className="size-5" />
-      </button>
+      </button> */}
     </nav>
   )
 }
