@@ -17,6 +17,7 @@ import { ALL_BLOCKS, PAGES, TOTAL_SECTIONS, blockFor } from '../data/sections'
 import * as api from '../lib/api'
 import { useSpeechRecognition } from '../lib/useSpeechRecognition'
 import { useMicLevel } from '../lib/useMicLevel'
+import { printCapacityFor } from '../lib/capacity'
 
 const AUTOSAVE_MS = 2000
 
@@ -35,6 +36,26 @@ function toSectionMap(saved = []) {
 
 const emptySection = { title: '', content: '', status: 'draft' }
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Spacing between bulk AI calls, to stay clear of upstream rate limits. */
+const FILL_PACING_MS = 800
+
+/**
+ * Runs an AI call, retrying once after a pause. The upstream model returns
+ * intermittent 502s under back-to-back requests, and losing a section to a
+ * transient error in the middle of a nineteen-section run is worth one retry.
+ */
+async function withRetry(call) {
+  try {
+    return await call()
+  } catch (err) {
+    if (!/50\d|Gateway|timeout/i.test(err.message)) throw err
+    await wait(1500)
+    return call()
+  }
+}
+
 export default function CreateTask() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -52,23 +73,21 @@ export default function CreateTask() {
   const [saveState, setSaveState] = useState('idle') // idle | saving | saved | error
   const [generating, setGenerating] = useState(false)
   const [validation, setValidation] = useState(null)
+  const [fill, setFill] = useState({ running: false, done: 0, total: 0, failed: [] })
+
+  // Read inside the fill loop, so cancelling takes effect on the next section
+  // rather than waiting for a re-render.
+  const cancelFillRef = useRef(false)
+  const failedFillRef = useRef([])
 
   const page = PAGES[pageIndex]
   const block = useMemo(() => blockFor(activeKey) ?? ALL_BLOCKS[0], [activeKey])
   const activeSection = sections[activeKey] ?? emptySection
 
-  // Character capacity measured from the rendered canvas blocks. The static
-  // value in sections.js is only a fallback for the first frame, before the
-  // canvas has laid out and reported real numbers.
-  const [capacities, setCapacities] = useState({})
-  const reportCapacity = useCallback((sectionKey, capacity) => {
-    setCapacities((current) =>
-      current[sectionKey] === capacity ? current : { ...current, [sectionKey]: capacity },
-    )
-  }, [])
-
-  const charLimit = capacities[activeKey] ?? block.charLimit
-  const measured = capacities[activeKey] != null
+  // How much text this section's box holds on the printed sheet. Derived from
+  // the print geometry, not the on-screen preview block — sizing copy to the
+  // preview is what left the exported PDF 11% full.
+  const charLimit = printCapacityFor(activeKey) ?? block.charLimit
 
   // An edition id is required — the editor has nothing to write to without one.
   useEffect(() => {
@@ -254,6 +273,74 @@ export default function CreateTask() {
     }
   }
 
+  /* ------------------------------------------------------- bulk page fill */
+
+  // A section this far below its box's capacity leaves visible white space on
+  // the printed sheet.
+  const UNDERFILL_RATIO = 0.6
+
+  const underFilled = useMemo(
+    () =>
+      ALL_BLOCKS.filter((candidate) => {
+        const section = sections[candidate.section_key]
+        if (!section?.content?.trim()) return false
+        const limit = printCapacityFor(candidate.section_key) ?? candidate.charLimit
+        return section.content.length < limit * UNDERFILL_RATIO
+      }),
+    [sections],
+  )
+
+  async function handleFillAll() {
+    if (fill.running) {
+      // A second click cancels; the loop checks this between sections.
+      cancelFillRef.current = true
+      return
+    }
+
+    cancelFillRef.current = false
+    setNotice('')
+    setFill({ running: true, done: 0, total: underFilled.length, failed: [] })
+
+    // Kept in a ref: refs are mutable by design, and the failures list must
+    // survive the loop without being the same object React holds in state.
+    failedFillRef.current = []
+    for (const [index, candidate] of underFilled.entries()) {
+      if (cancelFillRef.current) break
+
+      const key = candidate.section_key
+      const current = sections[key]
+      const limit = printCapacityFor(key) ?? candidate.charLimit
+
+      try {
+        // Sequential on purpose: 19 parallel calls invite Groq rate-limiting.
+        // Even sequentially, back-to-back calls return the occasional 502 from
+        // the upstream model, so each section gets one retry after a pause.
+        const result = await withRetry(() =>
+          api.expandContent({ summary: current.content, characterLimit: limit }),
+        )
+        editSection(key, {
+          content: result.expanded_content,
+          title: current.title || result.generated_title || '',
+        })
+      } catch (err) {
+        // One bad section should not abandon the other eighteen.
+        failedFillRef.current.push(`${candidate.section_name} (${err.message})`)
+      }
+
+      setFill((state) => ({ ...state, done: index + 1, failed: [...failedFillRef.current] }))
+
+      // Breathe between calls rather than hammering the model back to back.
+      if (index < underFilled.length - 1) await wait(FILL_PACING_MS)
+    }
+
+    const failed = failedFillRef.current
+    setFill((state) => ({ ...state, running: false }))
+    if (failed.length) {
+      setNotice(`Could not fill ${failed.length} section(s): ${failed.join('; ')}`)
+    }
+    await refreshValidation()
+  }
+
   async function handleHeadline() {
     setNotice('')
     setGenerating(true)
@@ -401,6 +488,22 @@ export default function CreateTask() {
 
           <div className="flex items-center gap-4">
             <SaveIndicator state={saveState} />
+
+            {/* Existing copy was written against the old undersized limits, so
+                a bulk pass avoids running "Expand to fit" nineteen times. */}
+            {(underFilled.length > 0 || fill.running) && (
+              <button
+                type="button"
+                onClick={handleFillAll}
+                className="inline-flex items-center gap-2 rounded-xl border border-brand-500 px-5 py-3.5 text-[15px] font-semibold text-brand-600 transition hover:bg-brand-50"
+              >
+                <SparkleIcon className="size-5" />
+                {fill.running
+                  ? `Filling ${fill.done + 1} of ${fill.total} — click to stop`
+                  : `Fill ${underFilled.length} thin section${underFilled.length === 1 ? '' : 's'}`}
+              </button>
+            )}
+
             <button
               type="button"
               onClick={refreshValidation}
@@ -492,7 +595,6 @@ export default function CreateTask() {
               sections={sections}
               activeKey={activeKey}
               onSelectSection={selectSection}
-              onMeasure={reportCapacity}
               masthead={edition?.newspaper_name}
               editionDate={edition?.date}
               editionLabel={edition?.edition_label}
@@ -505,9 +607,7 @@ export default function CreateTask() {
                   <h2 className="text-[19px] font-bold text-navy-900">{block.section_name}</h2>
                   <p className="mt-1 text-[13px] text-muted">
                     Page {block.page_number} ·{' '}
-                    {measured
-                      ? `${charLimit} characters fit this box`
-                      : `up to ${charLimit} characters`}
+                    {charLimit} characters fit the printed box
                   </p>
                 </div>
                 {activeSection.status === 'completed' && (
@@ -665,9 +765,9 @@ export default function CreateTask() {
                 <InfoIcon className="mt-0.5 size-5 shrink-0" />
                 <p>
                   <span className="font-medium text-ink">Tip:</span> Edits save automatically two
-                  seconds after you stop typing or dictating. The limit above is measured from this
-                  section's box on the page, so "Expand to fit" asks the AI for copy that fills it
-                  without overflowing.
+                  seconds after you stop typing or dictating. The limit above is the capacity of
+                  this section's box on the printed tabloid sheet, so "Expand to fit" asks the AI
+                  for copy that fills the page rather than leaving it half empty.
                 </p>
               </div>
             </section>

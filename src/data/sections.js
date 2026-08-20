@@ -10,7 +10,9 @@
  * every block a determinate box, which is what lets lib/capacity.js answer how
  * much text actually fits in it.
  *
- * `charLimit` is only a first-paint fallback — the real limit is measured.
+ * `charLimit` mirrors the printed box's capacity (see lib/capacity.js) and is
+ * used when the font cannot be measured. It is NOT the editor preview's size:
+ * sizing copy to the preview box is what left the printed page 11% full.
  */
 const PAGE_LAYOUTS = [
   {
@@ -19,18 +21,18 @@ const PAGE_LAYOUTS = [
     rows: [
       {
         weight: 3,
-        blocks: [{ section_key: 'main_breaking_news', section_name: 'Main Breaking News', span: 3, size: 'lead', charLimit: 2200 }],
+        blocks: [{ section_key: 'main_breaking_news', section_name: 'Main Breaking News', span: 3, size: 'lead', charLimit: 3960 }],
       },
       {
         weight: 3,
         blocks: [
-          { section_key: 'kerala_highlights', section_name: 'Kerala Highlights', span: 2, size: 'body', charLimit: 1600 },
-          { section_key: 'local_highlights', section_name: 'Local Highlights', span: 1, size: 'tall', charLimit: 900 },
+          { section_key: 'kerala_highlights', section_name: 'Kerala Highlights', span: 2, size: 'body', charLimit: 2775 },
+          { section_key: 'local_highlights', section_name: 'Local Highlights', span: 1, size: 'tall', charLimit: 1350 },
         ],
       },
       {
         weight: 2,
-        blocks: [{ section_key: 'short_news', section_name: 'Short News', span: 3, size: 'small', charLimit: 1200 }],
+        blocks: [{ section_key: 'short_news', section_name: 'Short News', span: 3, size: 'small', charLimit: 2475 }],
       },
     ],
   },
@@ -41,20 +43,20 @@ const PAGE_LAYOUTS = [
       {
         weight: 3,
         blocks: [
-          { section_key: 'kerala_news', section_name: 'Kerala News', span: 2, size: 'body', charLimit: 1600 },
-          { section_key: 'district_news', section_name: 'District News', span: 1, size: 'tall', charLimit: 900 },
+          { section_key: 'kerala_news', section_name: 'Kerala News', span: 2, size: 'body', charLimit: 2886 },
+          { section_key: 'district_news', section_name: 'District News', span: 1, size: 'tall', charLimit: 1404 },
         ],
       },
       {
         weight: 3,
         blocks: [
-          { section_key: 'politics', section_name: 'Politics', span: 2, size: 'body', charLimit: 1400 },
-          { section_key: 'crime_civic', section_name: 'Crime / Civic News', span: 1, size: 'tall', charLimit: 900 },
+          { section_key: 'politics', section_name: 'Politics', span: 2, size: 'body', charLimit: 2886 },
+          { section_key: 'crime_civic', section_name: 'Crime / Civic News', span: 1, size: 'tall', charLimit: 1404 },
         ],
       },
       {
         weight: 2,
-        blocks: [{ section_key: 'short_news_2', section_name: 'Short News', span: 3, size: 'small', charLimit: 1200 }],
+        blocks: [{ section_key: 'short_news_2', section_name: 'Short News', span: 3, size: 'small', charLimit: 2640 }],
       },
     ],
   },
@@ -65,16 +67,16 @@ const PAGE_LAYOUTS = [
       {
         weight: 3,
         blocks: [
-          { section_key: 'sports', section_name: 'Sports', span: 2, size: 'body', charLimit: 1600 },
-          { section_key: 'cricket_football', section_name: 'Cricket/Football', span: 1, size: 'tall', charLimit: 900 },
+          { section_key: 'sports', section_name: 'Sports', span: 2, size: 'body', charLimit: 4200 },
+          { section_key: 'cricket_football', section_name: 'Cricket/Football', span: 1, size: 'tall', charLimit: 2430 },
         ],
       },
       {
         weight: 2,
         blocks: [
-          { section_key: 'business', section_name: 'Business', span: 1, size: 'small', charLimit: 800 },
-          { section_key: 'cinema', section_name: 'Cinema', span: 1, size: 'small', charLimit: 800 },
-          { section_key: 'entertainment', section_name: 'Entertainment', span: 1, size: 'small', charLimit: 800 },
+          { section_key: 'business', section_name: 'Business', span: 1, size: 'small', charLimit: 1566 },
+          { section_key: 'cinema', section_name: 'Cinema', span: 1, size: 'small', charLimit: 1566 },
+          { section_key: 'entertainment', section_name: 'Entertainment', span: 1, size: 'small', charLimit: 1566 },
         ],
       },
     ],
@@ -86,16 +88,16 @@ const PAGE_LAYOUTS = [
       {
         weight: 3,
         blocks: [
-          { section_key: 'special_story', section_name: 'Special Story', span: 2, size: 'body', charLimit: 1600 },
-          { section_key: 'human_interest', section_name: 'Human Interest', span: 1, size: 'tall', charLimit: 900 },
+          { section_key: 'special_story', section_name: 'Special Story', span: 2, size: 'body', charLimit: 4200 },
+          { section_key: 'human_interest', section_name: 'Human Interest', span: 1, size: 'tall', charLimit: 2430 },
         ],
       },
       {
         weight: 2,
         blocks: [
-          { section_key: 'evening_updates', section_name: 'Evening Updates', span: 1, size: 'small', charLimit: 800 },
-          { section_key: 'tomorrow', section_name: "Tomorrow / What's Next", span: 1, size: 'small', charLimit: 800 },
-          { section_key: 'short_news_4', section_name: 'Short News', span: 1, size: 'small', charLimit: 800 },
+          { section_key: 'evening_updates', section_name: 'Evening Updates', span: 1, size: 'small', charLimit: 1566 },
+          { section_key: 'tomorrow', section_name: "Tomorrow / What's Next", span: 1, size: 'small', charLimit: 1566 },
+          { section_key: 'short_news_4', section_name: 'Short News', span: 1, size: 'small', charLimit: 1566 },
         ],
       },
     ],

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowRightIcon, CheckIcon } from '../components/Icons'
 import { PAGES, TOTAL_SECTIONS } from '../data/sections'
+import { COLUMNS, GRID_GAP, SHEET, SHEET_PADDING } from '../data/printGeometry'
+import { printCapacityFor } from '../lib/capacity'
 import * as api from '../lib/api'
 
 /**
@@ -13,10 +15,6 @@ import * as api from '../lib/api'
  * down as a preview; @page and the print rules in index.css take over when
  * printing.
  */
-
-// Columns per block on the printed sheet, from its width on the 3-column grid.
-// A newspaper page reads as narrow measures, so even a single-span block splits.
-const COLUMNS = { 1: 2, 2: 3, 3: 5 }
 
 const formatLongDate = (iso) => {
   const date = iso ? new Date(`${iso}T00:00:00`) : new Date()
@@ -36,6 +34,24 @@ export default function PrintEdition() {
   const [edition, setEdition] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [completing, setCompleting] = useState(false)
+  // Kept apart from `error`, which replaces the whole page: a failed status
+  // update should not throw away the sheets the user is about to print.
+  const [completeError, setCompleteError] = useState('')
+
+  async function markCompleted() {
+    setCompleting(true)
+    setCompleteError('')
+    try {
+      const updated = await api.updateEdition(editionId, { status: 'completed' })
+      // The PATCH response omits sections, so only the status is merged in.
+      setEdition((current) => ({ ...current, status: updated.status }))
+    } catch (err) {
+      setCompleteError(err.message)
+    } finally {
+      setCompleting(false)
+    }
+  }
 
   useEffect(() => {
     if (!editionId) {
@@ -69,6 +85,22 @@ export default function PrintEdition() {
         const section = sections[block.section_key]
         return !(section?.title && section?.content && section.status === 'completed')
       }),
+    [sections],
+  )
+
+  // Sections well short of their box print with visible white space beneath
+  // them. Not a blocker — a writer may want a short piece — but worth saying
+  // before the paper is committed to print.
+  const thin = useMemo(
+    () =>
+      PAGES.flatMap((page) => page.blocks)
+        .map((block) => {
+          const section = sections[block.section_key]
+          const capacity = printCapacityFor(block.section_key) ?? block.charLimit
+          const length = section?.content?.length ?? 0
+          return { block, capacity, length, fill: length / capacity }
+        })
+        .filter((entry) => entry.length > 0 && entry.fill < 0.6),
     [sections],
   )
 
@@ -117,6 +149,24 @@ export default function PrintEdition() {
           >
             Back to editor
           </Link>
+          {/* Nothing server-side ever sets `completed` — validate only promotes
+              an edition to `ready` — so archiving it is a client action. */}
+          {edition?.status === 'completed' ? (
+            <span className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-[15px] font-semibold text-emerald-700">
+              <CheckIcon className="size-5" />
+              Completed
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={markCompleted}
+              disabled={missing.length > 0 || completing}
+              title="Archive this edition as completed"
+              className="rounded-xl border border-line px-5 py-3 text-[15px] font-medium text-ink transition hover:bg-navy-50 disabled:opacity-50"
+            >
+              {completing ? 'Marking…' : 'Mark completed'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => window.print()}
@@ -128,6 +178,15 @@ export default function PrintEdition() {
           </button>
         </div>
       </header>
+
+      {completeError && (
+        <p
+          role="alert"
+          className="no-print mx-auto mt-6 max-w-[900px] rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-[15px] text-red-700"
+        >
+          {completeError}
+        </p>
+      )}
 
       {missing.length > 0 && (
         <div className="no-print mx-auto mt-6 max-w-[900px] rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-[15px] text-amber-900">
@@ -148,6 +207,30 @@ export default function PrintEdition() {
         </div>
       )}
 
+      {missing.length === 0 && thin.length > 0 && (
+        <div className="no-print mx-auto mt-6 max-w-[900px] rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-[15px] text-amber-900">
+          <p className="font-semibold">
+            {thin.length} section{thin.length === 1 ? '' : 's'} will leave white space — the text
+            fills less than 60% of the box.
+          </p>
+          <p className="mt-1">
+            {thin
+              .map(
+                ({ block, length, capacity }) =>
+                  `${block.section_name} (${Math.round((length / capacity) * 100)}%)`,
+              )
+              .join(', ')}
+          </p>
+          <Link
+            to={`/create?edition=${editionId}`}
+            className="mt-3 inline-flex items-center gap-2 font-medium text-brand-600 hover:text-brand-500"
+          >
+            Use “Fill thin sections” in the editor
+            <ArrowRightIcon className="size-4" />
+          </Link>
+        </div>
+      )}
+
       <div className="flex flex-col items-center gap-8 px-6 py-8 print:gap-0 print:p-0">
         {PAGES.map((page) => (
           <Sheet key={page.page_number} page={page} edition={edition} sections={sections} />
@@ -161,7 +244,14 @@ function Sheet({ page, edition, sections }) {
   const isFront = page.page_number === 1
 
   return (
-    <article className="print-sheet bg-white text-black shadow-[0_10px_40px_-24px_rgba(15,32,68,0.5)] print:shadow-none">
+    <article
+      className="print-sheet bg-white text-black shadow-[0_10px_40px_-24px_rgba(15,32,68,0.5)] print:shadow-none"
+      style={{
+        width: SHEET.width + 'mm',
+        height: SHEET.height + 'mm',
+        padding: SHEET_PADDING + 'mm',
+      }}
+    >
       <header className={isFront ? 'border-b-[3px] border-black pb-2' : 'border-b border-black pb-1.5'}>
         {isFront ? (
           <>
@@ -189,7 +279,10 @@ function Sheet({ page, edition, sections }) {
       {/* Rows take a fixed share of the sheet, mirroring the editor's canvas. */}
       <div
         className="print-grid"
-        style={{ gridTemplateRows: page.rows.map((row) => `${row.weight}fr`).join(' ') }}
+        style={{
+          gap: GRID_GAP + 'mm',
+          gridTemplateRows: page.rows.map((row) => `${row.weight}fr`).join(' '),
+        }}
       >
         {page.rows.flatMap((row) =>
           row.blocks.map((block) => {
@@ -212,7 +305,7 @@ function Sheet({ page, edition, sections }) {
                 </h2>
                 <div
                   className="mt-1.5 text-justify text-[8.5pt] leading-[1.35] hyphens-auto"
-                  style={{ columnCount: COLUMNS[block.span], columnGap: '4mm', columnRule: '0.4pt solid rgba(0,0,0,0.25)' }}
+                  style={{ columnCount: COLUMNS[block.span], columnGap: GRID_GAP + 'mm', columnRule: '0.4pt solid rgba(0,0,0,0.25)' }}
                 >
                   {section?.content}
                 </div>

@@ -40,12 +40,10 @@ body {
 
 /* ---------------------------------------------------------------- printing */
 
-/* One tabloid sheet, the size the edition is printed at. The same box is used
-   on screen as a preview and on paper, so what is previewed is what prints. */
+/* One tabloid sheet. Width, height and padding are applied inline by
+   PrintEdition.jsx from data/printGeometry.js, so the capacity maths and the
+   layout can never disagree; only the non-geometric bits live here. */
 .print-sheet {
-  width: 289mm;
-  height: 380mm;
-  padding: 10mm;
   display: flex;
   flex-direction: column;
 }
@@ -54,7 +52,6 @@ body {
 .print-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 4mm;
   flex: 1;
   min-height: 0;
   margin-top: 3mm;
@@ -67,6 +64,8 @@ body {
   .print-sheet { transform: scale(0.62); transform-origin: top center; margin-bottom: -140mm; }
 }
 
+/* Must match SHEET in data/printGeometry.js. @page only accepts static
+   literals, so this is the one copy of the sheet size that cannot be derived. */
 @page {
   size: 289mm 380mm;
   margin: 0;

@@ -1,6 +1,5 @@
-import { memo, useEffect, useRef } from 'react'
+import { memo } from 'react'
 import { CheckIcon, PencilIcon } from './Icons'
-import { measureCapacity } from '../lib/capacity'
 
 const MIN_HEIGHT = {
   lead: 'min-h-[150px]',
@@ -30,15 +29,12 @@ const formatEditionDate = (iso) => {
  * section key: clicking it selects that section, so what is typed or dictated
  * in the side panel is saved against a known `section_key`.
  *
- * Blocks also report how many characters their slot holds via `onMeasure`, so
- * the AI is asked for copy sized to the layout as it is actually rendered.
  */
 function NewspaperCanvas({
   page,
   sections,
   activeKey,
   onSelectSection,
-  onMeasure,
   masthead = 'DAILY NEWS',
   editionDate,
   editionLabel,
@@ -70,7 +66,6 @@ function NewspaperCanvas({
             section={sections[block.section_key]}
             active={activeKey === block.section_key}
             onSelect={onSelectSection}
-            onMeasure={onMeasure}
           />
         ))}
       </div>
@@ -83,36 +78,14 @@ function NewspaperCanvas({
   )
 }
 
-function Block({ block, section, active, onSelect, onMeasure }) {
+function Block({ block, section, active, onSelect }) {
   // A section only counts as filled once it has both a title and a body — the
   // same rule /validate applies on the server.
   const filled = Boolean(section?.title && section?.content)
   const done = filled && section.status === 'completed'
 
-  const blockRef = useRef(null)
-  const probeBodyRef = useRef(null)
-
-  // Re-measure whenever the block resizes (window, sidebar, zoom) and whenever
-  // the headline changes, since a headline that wraps steals a body line.
-  const title = section?.title ?? ''
-  useEffect(() => {
-    const blockEl = blockRef.current
-    if (!blockEl || !onMeasure) return undefined
-
-    const report = () => {
-      const capacity = measureCapacity(blockEl, probeBodyRef.current)
-      if (capacity) onMeasure(block.section_key, capacity)
-    }
-
-    report()
-    const observer = new ResizeObserver(report)
-    observer.observe(blockEl)
-    return () => observer.disconnect()
-  }, [block.section_key, onMeasure, title])
-
   return (
     <button
-      ref={blockRef}
       type="button"
       onClick={() => onSelect(block.section_key)}
       aria-pressed={active}
@@ -128,19 +101,6 @@ function Block({ block, section, active, onSelect, onMeasure }) {
             : 'border-brand-100 bg-brand-50/40 hover:border-brand-500 hover:bg-brand-50',
       ].join(' ')}
     >
-      {/* Hidden replica of the filled layout. It stays mounted even while the
-          block is empty, so an unwritten section can still be measured. */}
-      <div aria-hidden="true" className="invisible pointer-events-none absolute inset-0 flex flex-col p-5 text-left">
-        <span className={LABEL_CLASS}>
-          <PencilIcon className="size-3.5" />
-          {block.section_name}
-        </span>
-        <span className={TITLE_CLASS}>{title || block.section_name}</span>
-        <span ref={probeBodyRef} className={BODY_CLASS}>
-          &nbsp;
-        </span>
-      </div>
-
       <span className={`${LABEL_CLASS} ${done ? 'text-emerald-700' : 'text-brand-600'}`}>
         {done ? <CheckIcon className="size-3.5" /> : <PencilIcon className="size-3.5" />}
         {block.section_name}
