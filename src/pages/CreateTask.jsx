@@ -10,6 +10,7 @@ import {
   InfoIcon,
   MicIcon,
   PencilIcon,
+  PrinterIcon,
   SparkleIcon,
 } from '../components/Icons'
 import { ALL_BLOCKS, PAGES, TOTAL_SECTIONS, blockFor } from '../data/sections'
@@ -430,7 +431,16 @@ export default function CreateTask() {
               ].join(' ')}
             >
               {validation.all_completed ? (
-                <p>All 19 sections are complete — this edition is ready to print.</p>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <p>All 19 sections are complete — this edition is ready to print.</p>
+                  <Link
+                    to={'/print?edition=' + editionId}
+                    className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-[15px] font-semibold text-white transition hover:bg-emerald-700"
+                  >
+                    <PrinterIcon className="size-5" />
+                    Print edition
+                  </Link>
+                </div>
               ) : (
                 <>
                   <p className="font-semibold">

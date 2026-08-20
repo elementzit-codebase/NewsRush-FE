@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import CreateTask from './pages/CreateTask'
 import ForgotPassword from './pages/ForgotPassword'
 import Login from './pages/Login'
+import PrintEdition from './pages/PrintEdition'
 import Profile from './pages/Profile'
 import Register from './pages/Register'
 import ResetPassword from './pages/ResetPassword'
@@ -31,6 +32,14 @@ export default function App() {
         element={
           <RequireAuth>
             <CreateTask />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/print"
+        element={
+          <RequireAuth>
+            <PrintEdition />
           </RequireAuth>
         }
       />

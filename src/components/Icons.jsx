@@ -111,3 +111,6 @@ export const CalendarIcon = (p) => (
 export const LogoutIcon = (p) => (
   <Svg {...p}><path d="M9 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3" /><path d="M15.5 8.5 19 12l-3.5 3.5" /><path d="M19 12H9.5" /></Svg>
 )
+export const PrinterIcon = (p) => (
+  <Svg {...p}><path d="M7 9V3.5h10V9" /><rect x="3.5" y="9" width="17" height="7.5" rx="2" /><path d="M7 14h10v6.5H7Z" /></Svg>
+)

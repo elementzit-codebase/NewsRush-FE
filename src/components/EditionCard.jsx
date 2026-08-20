@@ -1,4 +1,5 @@
-import { ArrowRightIcon, CalendarIcon, TrashIcon } from './Icons'
+import { Link } from 'react-router-dom'
+import { ArrowRightIcon, CalendarIcon, PrinterIcon, TrashIcon } from './Icons'
 import NewspaperThumb from './NewspaperThumb'
 import StatusBadge from './StatusBadge'
 import { artFor } from '../data/editions'
@@ -92,14 +93,27 @@ export default function EditionCard({ edition, completed = 0, layout = 'grid', o
         ].join(' ')}
       >
         <StatusBadge status={edition.status} />
-        <button
-          type="button"
-          onClick={() => onOpen?.(edition)}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-brand-600 transition hover:text-brand-500"
-        >
-          Open editor
-          <ArrowRightIcon className="size-4" />
-        </button>
+        <div className="flex items-center gap-4">
+          {/* Offered once every section is done, so a finished edition can go
+              straight to print without reopening the editor. */}
+          {completed === TOTAL_SECTIONS && (
+            <Link
+              to={`/print?edition=${edition.id}`}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 transition hover:text-emerald-600"
+            >
+              <PrinterIcon className="size-4" />
+              Print
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => onOpen?.(edition)}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-brand-600 transition hover:text-brand-500"
+          >
+            Open editor
+            <ArrowRightIcon className="size-4" />
+          </button>
+        </div>
       </div>
     </article>
   )

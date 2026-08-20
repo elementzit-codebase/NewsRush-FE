@@ -37,3 +37,59 @@ body {
 .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
 .scroll-thin::-webkit-scrollbar-thumb { background: #d8e0ea; border-radius: 9999px; }
 .scroll-thin::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------------------------------------------------------------- printing */
+
+/* One tabloid sheet, the size the edition is printed at. The same box is used
+   on screen as a preview and on paper, so what is previewed is what prints. */
+.print-sheet {
+  width: 289mm;
+  height: 380mm;
+  padding: 10mm;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The block grid fills whatever the masthead and footer leave. */
+.print-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4mm;
+  flex: 1;
+  min-height: 0;
+  margin-top: 3mm;
+  margin-bottom: 3mm;
+}
+
+/* A tabloid sheet is wider than most viewports; scale it down for preview
+   without touching the print output. */
+@media screen and (max-width: 1400px) {
+  .print-sheet { transform: scale(0.62); transform-origin: top center; margin-bottom: -140mm; }
+}
+
+@page {
+  size: 289mm 380mm;
+  margin: 0;
+}
+
+@media print {
+  /* Only the sheets should reach the paper. */
+  .no-print { display: none !important; }
+
+  html, body, #root { height: auto; background: #fff; }
+
+  .print-sheet {
+    /* Any preview scaling must not follow the page onto paper. */
+    transform: none !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    break-after: page;
+  }
+  .print-sheet:last-child { break-after: auto; }
+
+  /* Keep a headline from being stranded at the foot of a column. */
+  .print-sheet h2 { break-after: avoid; }
+
+  /* Print backgrounds and rules as designed rather than dropping them. */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
