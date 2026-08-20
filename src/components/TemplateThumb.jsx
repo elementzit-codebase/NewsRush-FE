@@ -12,7 +12,7 @@ export default function TemplateThumb({ blocks, completedKeys, className = '' })
         <span
           key={block.section_key}
           className={`rounded-[2px] ${
-            completedKeys?.has(block.section_key) ? 'bg-emerald-400' : 'bg-slate-100'
+            completedKeys?.has(block.section_key) ? 'bg-brand-500' : 'bg-slate-100'
           }`}
           style={{
             gridColumn: `span ${block.span} / span ${block.span}`,

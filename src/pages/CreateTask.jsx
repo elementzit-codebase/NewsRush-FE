@@ -482,7 +482,7 @@ export default function CreateTask() {
                     </span>
                   </span>
                   {done === item.blocks.length && (
-                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-emerald-500 text-white">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-500 text-white">
                       <CheckIcon className="size-4" />
                     </span>
                   )}
