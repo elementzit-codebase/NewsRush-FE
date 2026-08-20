@@ -435,7 +435,7 @@ export default function CreateTask() {
   }
 
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex h-screen overflow-hidden bg-white">
       <Sidebar variant="panel" />
 
       {/* Page picker */}
@@ -488,7 +488,7 @@ export default function CreateTask() {
       </aside>
 
       {/* Main column */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex flex-wrap items-center justify-between gap-4 px-8 py-6">
           <nav aria-label="Breadcrumb" className="text-[15px] text-muted">
             <Link to="/" className="hover:text-ink">
@@ -529,11 +529,11 @@ export default function CreateTask() {
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 px-8 pb-12">
-          <h1 className="text-[clamp(26px,2.6vw,36px)] font-bold text-navy-900">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-8 pb-6">
+          <h1 className="shrink-0 text-[clamp(26px,2.6vw,36px)] font-bold text-navy-900">
             {edition?.newspaper_name}
           </h1>
-          <p className="mt-2 text-[17px] text-muted">
+          <p className="shrink-0 mt-2 text-[17px] text-muted">
             {edition?.edition_label} edition · {edition?.date} · {completedCount}/{TOTAL_SECTIONS}{' '}
             sections completed
           </p>
@@ -541,7 +541,7 @@ export default function CreateTask() {
           {validation && (
             <div
               className={[
-                'mt-5 rounded-xl border px-5 py-4 text-[15px]',
+                'shrink-0 mt-5 rounded-xl border px-5 py-4 text-[15px]',
                 validation.all_completed
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                   : 'border-amber-200 bg-amber-50 text-amber-800',
@@ -584,7 +584,7 @@ export default function CreateTask() {
           )}
 
           {/* Small-screen page switcher, since the sidebar is xl-only. */}
-          <div className="mt-6 flex gap-2 xl:hidden" role="group" aria-label="Select page">
+          <div className="shrink-0 mt-6 flex gap-2 xl:hidden" role="group" aria-label="Select page">
             {PAGES.map((item, index) => (
               <button
                 key={item.page_number}
@@ -603,19 +603,23 @@ export default function CreateTask() {
             ))}
           </div>
 
-          <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
-            <NewspaperCanvas
-              page={page}
-              sections={sections}
-              activeKey={activeKey}
-              onSelectSection={selectSection}
-              masthead={edition?.newspaper_name}
-              editionDate={edition?.date}
-              editionLabel={edition?.edition_label}
-            />
+          <div className="mt-7 grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+            {/* The only scrolling region: the page picker, the header and the
+                section editor stay put while the sheet scrolls past them. */}
+            <div className="scroll-thin min-h-0 overflow-y-auto pr-1">
+              <NewspaperCanvas
+                page={page}
+                sections={sections}
+                activeKey={activeKey}
+                onSelectSection={selectSection}
+                masthead={edition?.newspaper_name}
+                editionDate={edition?.date}
+                editionLabel={edition?.edition_label}
+              />
+            </div>
 
             {/* Section editor */}
-            <section className="h-fit rounded-2xl border border-line bg-brand-50/40 p-6">
+            <section className="scroll-thin min-h-0 overflow-y-auto rounded-2xl border border-line bg-brand-50/40 p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-[19px] font-bold text-navy-900">{block.section_name}</h2>
