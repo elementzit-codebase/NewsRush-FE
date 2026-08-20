@@ -18,6 +18,8 @@ import * as api from '../lib/api'
 import { useSpeechRecognition } from '../lib/useSpeechRecognition'
 import { useMicLevel } from '../lib/useMicLevel'
 import { printCapacityFor } from '../lib/capacity'
+import { buildPage, buildPages, templatesForPage } from '../data/templates'
+import { readTemplates, writeTemplate } from '../lib/templateStore'
 
 const AUTOSAVE_MS = 2000
 
@@ -80,14 +82,19 @@ export default function CreateTask() {
   const cancelFillRef = useRef(false)
   const failedFillRef = useRef([])
 
-  const page = PAGES[pageIndex]
+  // Template choice per page, kept in the browser (the backend has no field
+  // for a layout). Resolving here means the canvas, the capacity maths and the
+  // print sheet all follow the same arrangement.
+  const [templates, setTemplates] = useState(() => readTemplates(editionId))
+  const pages = useMemo(() => buildPages(templates), [templates])
+  const page = pages[pageIndex]
   const block = useMemo(() => blockFor(activeKey) ?? ALL_BLOCKS[0], [activeKey])
   const activeSection = sections[activeKey] ?? emptySection
 
   // How much text this section's box holds on the printed sheet. Derived from
   // the print geometry, not the on-screen preview block — sizing copy to the
   // preview is what left the exported PDF 11% full.
-  const charLimit = printCapacityFor(activeKey) ?? block.charLimit
+  const charLimit = printCapacityFor(activeKey, pages) ?? block.charLimit
 
   // An edition id is required — the editor has nothing to write to without one.
   useEffect(() => {
@@ -183,8 +190,18 @@ export default function CreateTask() {
     clearTimeout(timerRef.current)
     flush(activeKey)
     setPageIndex(index)
-    setActiveKey(PAGES[index].blocks[0].section_key)
+    setActiveKey(pages[index].blocks[0].section_key)
     setNotice('')
+  }
+
+  /**
+   * Switching template only rearranges the page — the sections and everything
+   * written into them are untouched, so nothing needs saving to the server.
+   * The new box sizes do change each section's capacity, which the AI limit
+   * picks up automatically through `pages`.
+   */
+  function selectTemplate(pageNumber, templateKey) {
+    setTemplates(writeTemplate(editionId, pageNumber, templateKey))
   }
 
   /* -------------------------------------------------------------- speech */
@@ -284,10 +301,10 @@ export default function CreateTask() {
       ALL_BLOCKS.filter((candidate) => {
         const section = sections[candidate.section_key]
         if (!section?.content?.trim()) return false
-        const limit = printCapacityFor(candidate.section_key) ?? candidate.charLimit
+        const limit = printCapacityFor(candidate.section_key, pages) ?? candidate.charLimit
         return section.content.length < limit * UNDERFILL_RATIO
       }),
-    [sections],
+    [pages, sections],
   )
 
   async function handleFillAll() {
@@ -309,7 +326,7 @@ export default function CreateTask() {
 
       const key = candidate.section_key
       const current = sections[key]
-      const limit = printCapacityFor(key) ?? candidate.charLimit
+      const limit = printCapacityFor(key, pages) ?? candidate.charLimit
 
       try {
         // Sequential on purpose: 19 parallel calls invite Groq rate-limiting.
@@ -425,28 +442,30 @@ export default function CreateTask() {
       <Sidebar variant="panel" />
 
       {/* Page picker */}
-      <aside className="hidden w-[300px] shrink-0 flex-col border-r border-line bg-canvas px-5 py-8 xl:flex">
-        <h2 className="text-[22px] font-bold text-navy-900">Pages</h2>
+      <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-canvas px-5 py-8 xl:flex">
+        <h2 className="text-[22px] font-bold text-navy-900">Pages &amp; Templates</h2>
         <p className="mt-1 text-[15px] text-muted">
           {completedCount} of {TOTAL_SECTIONS} sections completed.
         </p>
 
         <ul className="scroll-thin mt-6 flex-1 space-y-3 overflow-y-auto pr-1">
-          {PAGES.map((item, index) => {
+          {pages.map((item, index) => {
             const selected = index === pageIndex
             const done = item.blocks.filter((b) => completedKeys.has(b.section_key)).length
+            const variants = templatesForPage(item.page_number)
             return (
-              <li key={item.page_number}>
+              <li
+                key={item.page_number}
+                className={[
+                  'rounded-2xl border bg-white transition',
+                  selected ? 'border-brand-500 ring-2 ring-brand-100' : 'border-line',
+                ].join(' ')}
+              >
                 <button
                   type="button"
                   onClick={() => selectPage(index)}
                   aria-pressed={selected}
-                  className={[
-                    'flex w-full items-start gap-3.5 rounded-2xl border p-3.5 text-left transition',
-                    selected
-                      ? 'border-brand-500 bg-white ring-2 ring-brand-100'
-                      : 'border-line bg-white hover:border-brand-100',
-                  ].join(' ')}
+                  className="flex w-full items-start gap-3.5 p-3.5 text-left"
                 >
                   <TemplateThumb
                     blocks={item.blocks}
@@ -457,7 +476,8 @@ export default function CreateTask() {
                     <span className="block font-semibold text-ink">
                       Page {item.page_number} — {item.name}
                     </span>
-                    <span className="mt-1 block text-[13px] leading-relaxed text-muted">
+                    <span className="mt-1 block text-[13px] text-muted">{item.templateName}</span>
+                    <span className="mt-0.5 block text-[13px] leading-relaxed text-muted">
                       {done} of {item.blocks.length} sections done
                     </span>
                   </span>
@@ -467,6 +487,50 @@ export default function CreateTask() {
                     </span>
                   )}
                 </button>
+
+                {/* Templates rearrange the sections a page already owns, so
+                    switching never changes what has been written. */}
+                {selected && (
+                  <div className="border-t border-line px-3.5 py-3">
+                    <p className="text-[12px] font-semibold tracking-wide text-muted uppercase">
+                      Change template
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      {variants.map((variant) => {
+                        const current = variant.key === item.templateKey
+                        return (
+                          <button
+                            key={variant.key}
+                            type="button"
+                            onClick={() => selectTemplate(item.page_number, variant.key)}
+                            aria-pressed={current}
+                            title={variant.description}
+                            className={[
+                              'flex-1 rounded-xl border p-2 text-left transition',
+                              current
+                                ? 'border-brand-500 bg-brand-50/60'
+                                : 'border-line hover:border-brand-100',
+                            ].join(' ')}
+                          >
+                            <TemplateThumb
+                              blocks={buildPage(item.page_number, variant.key).blocks}
+                              completedKeys={completedKeys}
+                              className="w-full"
+                            />
+                            <span
+                              className={[
+                                'mt-1.5 block text-[12px] font-medium',
+                                current ? 'text-brand-600' : 'text-muted',
+                              ].join(' ')}
+                            >
+                              {variant.name}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </li>
             )
           })}
@@ -571,7 +635,7 @@ export default function CreateTask() {
 
           {/* Small-screen page switcher, since the sidebar is xl-only. */}
           <div className="shrink-0 mt-6 flex gap-2 xl:hidden" role="group" aria-label="Select page">
-            {PAGES.map((item, index) => (
+            {pages.map((item, index) => (
               <button
                 key={item.page_number}
                 type="button"

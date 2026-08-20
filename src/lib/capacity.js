@@ -72,17 +72,18 @@ export function charsThatFit({ widthPx, heightPx, font, lineHeightPx }) {
  */
 export const MAX_REQUESTABLE_CHARS = 4200
 
-// Geometry never changes at runtime, so the whole table is built once.
-let capacityTable = null
+// Geometry is constant for a given set of templates, so each arrangement is
+// measured once and cached under its own signature.
+const capacityTables = new Map()
 
-function buildCapacityTable() {
+function buildCapacityTable(pages) {
   const table = {}
   const bodyFont = `${mmToPx(ptToMm(TYPE.bodyPt))}px ${
     getComputedStyle(document.body).fontFamily || 'sans-serif'
   }`
   const lineHeightPx = mmToPx(ptToMm(TYPE.bodyPt * TYPE.bodyLeading))
 
-  for (const page of PAGES) {
+  for (const page of pages) {
     page.rows.forEach((row, rowIndex) => {
       const height = rowHeight(page, rowIndex)
 
@@ -114,13 +115,27 @@ function buildCapacityTable() {
   return table
 }
 
+// Two arrangements differ only by which template each page uses.
+const signatureOf = (pages) =>
+  pages.map((page) => `${page.page_number}:${page.templateKey ?? 'default'}`).join('|')
+
 /**
- * Characters that fit this section's printed box, capped to what the server can
- * safely generate. Falls back to the static value in sections.js when there is
- * no DOM to measure the font with.
+ * Characters that fit this section's printed box under the given arrangement,
+ * capped to what the server can safely generate.
+ *
+ * `pages` matters: a template that gives a section a wider or taller box also
+ * gives it a larger capacity, and the limit sent to /api/ai/expand has to
+ * follow, or copy written for one layout will overrun another.
+ *
+ * Falls back to the static value in sections.js when there is no DOM to measure
+ * the font with.
  */
-export function printCapacityFor(sectionKey) {
+export function printCapacityFor(sectionKey, pages = PAGES) {
   if (typeof document === 'undefined') return null
-  capacityTable ??= buildCapacityTable()
-  return capacityTable[sectionKey] ?? null
+
+  const signature = signatureOf(pages)
+  if (!capacityTables.has(signature)) {
+    capacityTables.set(signature, buildCapacityTable(pages))
+  }
+  return capacityTables.get(signature)[sectionKey] ?? null
 }
