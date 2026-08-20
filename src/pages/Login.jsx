@@ -11,7 +11,7 @@ import {
   FileTextIcon,
   UsersIcon,
 } from '../components/Icons'
-import { useAuth } from '../lib/auth'
+import { canAccessPath, useAuth } from '../lib/auth'
 
 const FEATURES = [
   {
@@ -42,15 +42,19 @@ export default function Login() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const destination = location.state?.from?.pathname ?? '/'
+  // Where the guard sent this visitor from, if anywhere.
+  const requested = location.state?.from?.pathname
 
   async function handleSubmit(event) {
     event.preventDefault()
     setError('')
     setSubmitting(true)
     try {
-      await signIn({ email, password })
-      navigate(destination, { replace: true })
+      const session = await signIn({ email, password })
+      // Only return to the remembered page if this user may actually open it.
+      // Otherwise a sign-out from a system-only page would strand the next
+      // person to sign in on a screen they have no access to.
+      navigate(canAccessPath(requested, session.user) ? requested : '/', { replace: true })
     } catch (err) {
       setError(err.message)
     } finally {

@@ -80,6 +80,28 @@ export function useAuth() {
   return context
 }
 
+/**
+ * Routes the backend restricts to system users (`require_system_user`).
+ * Kept beside the guards so the list cannot drift from what they enforce.
+ */
+const SYSTEM_ONLY_PATHS = ['/users']
+
+/**
+ * Whether a signed-in user may open a path.
+ *
+ * Used after login to vet the remembered destination: signing out of a
+ * system-only page stores it as "where you were headed", and the next person to
+ * sign in — possibly a different, non-system user — would otherwise be sent
+ * straight to a page they cannot open.
+ */
+export function canAccessPath(path, user) {
+  if (!path) return false
+  const systemOnly = SYSTEM_ONLY_PATHS.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+  )
+  return !systemOnly || Boolean(user?.is_system_user)
+}
+
 /** Redirects to the login screen, remembering where the user was headed. */
 export function RequireAuth({ children }) {
   const { user, ready } = useAuth()
