@@ -147,12 +147,17 @@ export default function CreateTask() {
   // Never leave an edit stranded in the debounce window.
   useEffect(() => () => clearTimeout(timerRef.current), [])
 
-  function selectSection(sectionKey) {
-    clearTimeout(timerRef.current)
-    flush(activeKey)
-    setActiveKey(sectionKey)
-    setNotice('')
-  }
+  // Wrapped so the memoised canvas keeps a stable prop and does not re-render
+  // every time the recorder reports a new level.
+  const selectSection = useCallback(
+    (sectionKey) => {
+      clearTimeout(timerRef.current)
+      flush(activeKey)
+      setActiveKey(sectionKey)
+      setNotice('')
+    },
+    [flush, activeKey],
+  )
 
   function selectPage(index) {
     clearTimeout(timerRef.current)
@@ -179,6 +184,52 @@ export default function CreateTask() {
 
   // Runs alongside recognition purely to show that audio is arriving.
   const mic = useMicLevel(speech.listening)
+
+  /* Press-and-hold recording. Tracked in a ref rather than state because the
+     release handlers must see the current value synchronously, and a stray
+     release (pointercancel, blur, key-up without key-down) must be ignored
+     rather than stopping a recording it never started. */
+  const holdingRef = useRef(false)
+
+  function startRecording() {
+    if (holdingRef.current || speech.listening) return
+    holdingRef.current = true
+    speech.start()
+  }
+
+  function stopRecording() {
+    if (!holdingRef.current) return
+    holdingRef.current = false
+    speech.stop()
+  }
+
+  function handlePointerDown(event) {
+    // Capturing the pointer means the release still arrives even if the finger
+    // slides off the button, which would otherwise strand the mic open.
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    startRecording()
+  }
+
+  function handlePointerUp(event) {
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    stopRecording()
+  }
+
+  function handleKeyDown(event) {
+    if (event.key !== ' ' && event.key !== 'Enter') return
+    // Holding a key auto-repeats keydown; only the first should start.
+    event.preventDefault()
+    if (event.repeat) return
+    startRecording()
+  }
+
+  function handleKeyUp(event) {
+    if (event.key !== ' ' && event.key !== 'Enter') return
+    event.preventDefault()
+    stopRecording()
+  }
 
   /* ------------------------------------------------------------------ ai */
 
@@ -507,13 +558,24 @@ export default function CreateTask() {
                     <div className="mt-4 flex items-center gap-4 rounded-xl border border-line bg-white px-4 py-3">
                       <button
                         type="button"
-                        onClick={speech.toggle}
-                        aria-label={speech.listening ? 'Stop recording' : 'Start recording'}
-                        aria-pressed={speech.listening}
+                        onPointerDown={handlePointerDown}
+                        onPointerUp={handlePointerUp}
+                        onPointerCancel={handlePointerUp}
+                        // Space and Enter fire as press-and-hold too, so the
+                        // control is usable without a pointer.
+                        onKeyDown={handleKeyDown}
+                        onKeyUp={handleKeyUp}
+                        // Losing focus mid-hold would otherwise leave the
+                        // microphone open with no way to release it.
+                        onBlur={stopRecording}
+                        aria-label="Hold to record"
+                        aria-describedby="hold-to-record-hint"
+                        // Stops a long press from selecting text or scrolling
+                        // the page on touch devices.
                         className={[
-                          'grid size-12 shrink-0 place-items-center rounded-full text-white transition',
+                          'grid size-12 shrink-0 touch-none place-items-center rounded-full text-white transition select-none',
                           speech.listening
-                            ? 'bg-red-500 hover:bg-red-600'
+                            ? 'scale-110 bg-red-500 ring-4 ring-red-200'
                             : 'bg-brand-500 hover:bg-brand-600',
                         ].join(' ')}
                       >
@@ -533,13 +595,13 @@ export default function CreateTask() {
 
                     {/* The meter reads the mic directly, so a flat bar while
                         recording means no audio is arriving at all. */}
-                    {speech.listening && (
-                      <p className="mt-2 text-[13px] text-muted">
-                        {mic.level > 0.02
-                          ? 'Listening — speak normally, text appears as phrases finish.'
-                          : 'No sound detected yet. Check the microphone is unmuted and selected.'}
-                      </p>
-                    )}
+                    <p id="hold-to-record-hint" className="mt-2 text-[13px] text-muted">
+                      {!speech.listening
+                        ? 'Hold the microphone to record. Release to stop.'
+                        : mic.hasSound
+                          ? 'Recording — keep holding. Release when you are done.'
+                          : 'No sound detected. Check the microphone is unmuted and selected.'}
+                    </p>
                   </>
                 ) : (
                   <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">

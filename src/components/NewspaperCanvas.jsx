@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { CheckIcon, PencilIcon } from './Icons'
 import { measureCapacity } from '../lib/capacity'
 
@@ -33,7 +33,7 @@ const formatEditionDate = (iso) => {
  * Blocks also report how many characters their slot holds via `onMeasure`, so
  * the AI is asked for copy sized to the layout as it is actually rendered.
  */
-export default function NewspaperCanvas({
+function NewspaperCanvas({
   page,
   sections,
   activeKey,
@@ -160,3 +160,10 @@ function Block({ block, section, active, onSelect, onMeasure }) {
     </button>
   )
 }
+
+/**
+ * Memoised because the recorder updates its input level while the editor is
+ * open. Without this, every level change would re-render all 19 blocks and
+ * re-run their measurements, which showed up as visible flicker.
+ */
+export default memo(NewspaperCanvas)

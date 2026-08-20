@@ -26,7 +26,9 @@ export default function Waveform({
       {HEIGHTS.slice(0, bars).map((h, i) => (
         <span
           key={i}
-          className={`w-[3px] rounded-full transition-[height] duration-75 ${color}`}
+          // Matches the hook's emit interval, so bars glide between updates
+          // instead of snapping and holding, which reads as strobing.
+          className={`w-[3px] rounded-full transition-[height] duration-150 ease-out ${color}`}
           style={{
             height: `${Math.max(4, h * scale)}%`,
             opacity: 0.35 + (h / 100) * 0.65,
