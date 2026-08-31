@@ -70,7 +70,7 @@ export default function Login() {
           <NewspaperMarkIcon className="size-11 text-brand-500" strokeWidth={1.5} />
           <span>
             <span className="block text-[26px] leading-none font-bold text-navy-900">
-              NewsCraft <span className="text-brand-500">AI</span>
+              NewsRush <span className="text-brand-500"></span>
             </span>
             <span className="mt-1 block text-[13px] text-muted">AI-Powered News Creation</span>
           </span>
