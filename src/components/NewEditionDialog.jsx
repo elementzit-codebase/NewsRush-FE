@@ -5,12 +5,14 @@ const today = () => new Date().toISOString().slice(0, 10)
 
 const LABEL_SUGGESTIONS = ['Evening', 'Morning', 'City', 'Weekend', 'Special']
 
+/** Fixed for every edition; not exposed in the form. */
+const NEWSPAPER_NAME = 'NewsRush Daily'
+
 /**
- * Collects the three fields `POST /api/editions` requires. Field names match the
- * request body exactly, so the values submit without translation.
+ * Collects the fields `POST /api/editions` requires. `newspaper_name` is fixed
+ * (see NEWSPAPER_NAME) and not shown; the rest match the request body exactly.
  */
 export default function NewEditionDialog({ onCancel, onCreate }) {
-  const [newspaperName, setNewspaperName] = useState('')
   const [date, setDate] = useState(today)
   const [editionLabel, setEditionLabel] = useState('Evening')
   const [saving, setSaving] = useState(false)
@@ -28,7 +30,7 @@ export default function NewEditionDialog({ onCancel, onCreate }) {
     setSaving(true)
     try {
       await onCreate({
-        newspaper_name: newspaperName.trim(),
+        newspaper_name: NEWSPAPER_NAME,
         date,
         edition_label: editionLabel.trim(),
       })
@@ -58,25 +60,13 @@ export default function NewEditionDialog({ onCancel, onCreate }) {
         </p>
 
         <label className="mt-6 block">
-          <span className="text-[14px] font-medium text-ink">Newspaper name</span>
-          <input
-            value={newspaperName}
-            onChange={(e) => setNewspaperName(e.target.value)}
-            required
-            maxLength={200}
-            autoFocus
-            placeholder="Evening Herald"
-            className="mt-1.5 w-full rounded-xl border border-line px-4 py-3 text-[15px] outline-none focus:border-brand-500"
-          />
-        </label>
-
-        <label className="mt-4 block">
           <span className="text-[14px] font-medium text-ink">Date</span>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             required
+            autoFocus
             className="mt-1.5 w-full rounded-xl border border-line px-4 py-3 text-[15px] outline-none focus:border-brand-500"
           />
         </label>
