@@ -329,7 +329,7 @@ function Masthead({ name }) {
   return words.map((word, i) => (
     <Fragment key={i}>
       {i > 0 && ' '}
-      <span className={words.length > 1 && i === last ? 'text-[0.6em] italic' : undefined}>
+      <span className={words.length > 1 && i === last ? 'text-[0.7em] italic' : undefined}>
         <LogoWord word={word} />
       </span>
     </Fragment>
