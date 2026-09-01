@@ -31,12 +31,15 @@ function toSectionMap(saved = []) {
       title: section.title ?? '',
       content: section.content ?? '',
       status: section.status ?? 'draft',
+      // The label is stored per section on the server (SectionBase.section_name),
+      // so a rename survives a reload. Empty means "use the canonical name".
+      section_name: section.section_name ?? '',
     }
   }
   return map
 }
 
-const emptySection = { title: '', content: '', status: 'draft' }
+const emptySection = { title: '', content: '', status: 'draft', section_name: '' }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -91,6 +94,11 @@ export default function CreateTask() {
   const block = useMemo(() => blockFor(activeKey) ?? ALL_BLOCKS[0], [activeKey])
   const activeSection = sections[activeKey] ?? emptySection
 
+  // The section label shown on the canvas and in the editor. Editable per
+  // section; a blank override just means the canonical name from sections.js.
+  const activeName = activeSection.section_name?.trim() || block.section_name
+  const nameIsCustom = activeName !== block.section_name
+
   // How much text this section's box holds on the printed sheet. Derived from
   // the print geometry, not the on-screen preview block — sizing copy to the
   // preview is what left the exported PDF 11% full.
@@ -137,7 +145,8 @@ export default function CreateTask() {
         await api.saveSection(editionId, {
           page_number: target.page_number,
           section_key: target.section_key,
-          section_name: target.section_name,
+          // A blank custom label falls back to the canonical section name.
+          section_name: draft.section_name?.trim() || target.section_name,
           title: draft.title,
           content: draft.content,
           status: draft.status,
@@ -671,15 +680,36 @@ export default function CreateTask() {
             {/* Section editor */}
             <section className="scroll-thin min-h-0 overflow-y-auto rounded-2xl border border-line bg-brand-50/40 p-6">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-[19px] font-bold text-navy-900">{block.section_name}</h2>
-                  <p className="mt-1 text-[13px] text-muted">
-                    Page {block.page_number} ·{' '}
-                    {charLimit} characters fit the printed box
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[14px] font-medium text-ink">Section label</span>
+                    {nameIsCustom && (
+                      <button
+                        type="button"
+                        onClick={() => editSection(activeKey, { section_name: '' })}
+                        className="text-[13px] font-medium text-brand-600 transition hover:text-brand-500"
+                      >
+                        Reset to “{block.section_name}”
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-line bg-white px-4 transition focus-within:border-brand-500">
+                    <PencilIcon className="size-4 shrink-0 text-muted" />
+                    <input
+                      value={activeName}
+                      onChange={(e) =>
+                        editSection(activeKey, { section_name: e.target.value.slice(0, 60) })
+                      }
+                      aria-label="Section label"
+                      className="min-w-0 flex-1 bg-transparent py-2.5 text-[17px] font-bold text-navy-900 outline-none"
+                    />
+                  </div>
+                  <p className="mt-1.5 text-[13px] text-muted">
+                    Page {block.page_number} · {charLimit} characters fit the printed box
                   </p>
                 </div>
                 {activeSection.status === 'completed' && (
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[12px] font-medium text-emerald-700">
+                  <span className="mt-6 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[12px] font-medium text-emerald-700">
                     <CheckIcon className="size-3.5" />
                     Complete
                   </span>
@@ -717,7 +747,7 @@ export default function CreateTask() {
                   }
                   placeholder="Type the section body, or dictate it..."
                   rows={11}
-                  aria-label={'Body text for ' + block.section_name}
+                  aria-label={'Body text for ' + activeName}
                   className="scroll-thin h-[260px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
                 />
                 {speech.interim && (

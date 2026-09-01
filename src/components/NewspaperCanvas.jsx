@@ -92,6 +92,9 @@ function Block({ block, section, active, onSelect }) {
   const filled = Boolean(section?.title && section?.content)
   const done = filled && section.status === 'completed'
 
+  // A per-section rename overrides the canonical label from sections.js.
+  const label = section?.section_name?.trim() || block.section_name
+
   const [expanded, setExpanded] = useState(false)
   const [overflowing, setOverflowing] = useState(false)
   const bodyRef = useRef(null)
@@ -143,7 +146,7 @@ function Block({ block, section, active, onSelect }) {
     >
       <span className={`${LABEL_CLASS} ${done ? 'text-emerald-700' : 'text-brand-600'}`}>
         {done ? <CheckIcon className="size-3.5" /> : <PencilIcon className="size-3.5" />}
-        {block.section_name}
+        {label}
       </span>
 
       {filled ? (
@@ -181,7 +184,7 @@ function Block({ block, section, active, onSelect }) {
         </>
       ) : (
         <>
-          <span className="text-[15px] font-semibold text-brand-500">Add {block.section_name}</span>
+          <span className="text-[15px] font-semibold text-brand-500">Add {label}</span>
           <span className="mt-1 text-[13px] text-slate-500">Type or record to add content</span>
         </>
       )}

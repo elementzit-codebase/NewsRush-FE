@@ -333,7 +333,7 @@ function Sheet({ page, totalPages, edition, sections }) {
                 style={{ gridColumn: `span ${block.span} / span ${block.span}` }}
               >
                 <p className="text-[7.5pt] font-bold tracking-[0.12em] uppercase">
-                  {block.section_name}
+                  {section?.section_name?.trim() || block.section_name}
                 </p>
                 <h2
                   className={`mt-1 font-serif leading-[1.1] ${
