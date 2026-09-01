@@ -44,6 +44,23 @@ const formatLongDate = (iso) => {
   })
 }
 
+/**
+ * Filename the "Save as PDF" dialog pre-fills. Browsers seed it from
+ * `document.title`, so PrintEdition swaps the title to this for the duration of
+ * the print call. Characters illegal in filenames are stripped.
+ */
+const pdfFileName = (edition) =>
+  [
+    edition?.newspaper_name,
+    edition?.edition_label && `${edition.edition_label} Edition`,
+    edition?.date,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/[\\/:*?"<>|]+/g, '')
+    .trim()
+    .replace(/\s+/g, '_') || 'edition'
+
 export default function PrintEdition() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -62,6 +79,19 @@ export default function PrintEdition() {
 
   // Holds the fitted body size for every sheet at once.
   const sheetsRef = useRef(null)
+
+  // The browser's "Save as PDF" dialog seeds its filename from document.title.
+  // Setting it for the whole time this page is mounted means both the Print
+  // button and a plain Ctrl/Cmd+P get the "<name> - <label> - <date>" filename,
+  // with no timing race against the print dialog.
+  useEffect(() => {
+    if (!edition) return undefined
+    const previousTitle = document.title
+    document.title = pdfFileName(edition)
+    return () => {
+      document.title = previousTitle
+    }
+  }, [edition])
 
   async function markCompleted() {
     setCompleting(true)
