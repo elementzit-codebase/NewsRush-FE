@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowRightIcon, CheckIcon } from '../components/Icons'
 import { TOTAL_SECTIONS } from '../data/sections'
@@ -279,6 +279,63 @@ export default function PrintEdition() {
   )
 }
 
+/**
+ * The letter cut by thin vertical white gaps so it reads as sliced type. The
+ * gaps are white bars laid over the glyph; the masthead sits on white, so only
+ * the part crossing the letter shows.
+ */
+function SlicedLetter({ char }) {
+  const cuts = ['30%', '54%', '78%']
+  return (
+    <span className="relative inline-block not-italic">
+      {char}
+      {/* The cuts live in their own clipped overlay so they stay within this
+          letter's box — the glyph itself above is untouched and keeps its
+          full height. */}
+      <span aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        {cuts.map((left, i) => (
+          <span
+            key={i}
+            className="absolute -inset-y-[0.6em] w-[0.05em] bg-white"
+            style={{ left, transform: 'rotate(45deg)' }}
+          />
+        ))}
+      </span>
+    </span>
+  )
+}
+
+/**
+ * The mid-word "R" in "NewsRush" is rendered as sliced type — a small logo
+ * accent. Only an interior "R" is treated; every other letter is left alone.
+ */
+function LogoWord({ word }) {
+  return [...word].map((char, i) =>
+    i > 0 && char === 'R' ? <SlicedLetter key={i} char={char} /> : char,
+  )
+}
+
+/**
+ * Renders the paper's name with its last word set smaller and italic — the
+ * house style for the "… Daily" suffix — and any mid-word capital rendered as a
+ * logo mark. Sizes are relative (em), so this works at both the front-page
+ * masthead and the running-head sizes. A single-word name keeps the logo mark
+ * but no italic suffix.
+ */
+function Masthead({ name }) {
+  const words = (name ?? '').trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return ''
+  const last = words.length - 1
+  return words.map((word, i) => (
+    <Fragment key={i}>
+      {i > 0 && ' '}
+      <span className={words.length > 1 && i === last ? 'text-[0.6em] italic' : undefined}>
+        <LogoWord word={word} />
+      </span>
+    </Fragment>
+  ))
+}
+
 function Sheet({ page, totalPages, edition, sections }) {
   const isFront = page.page_number === 1
 
@@ -299,7 +356,7 @@ function Sheet({ page, totalPages, edition, sections }) {
               <span className="uppercase">{edition?.edition_label} Edition</span>
             </div>
             <h1 className="mt-2 text-center font-serif text-[42pt] leading-none tracking-tight">
-              {edition?.newspaper_name}
+              <Masthead name={edition?.newspaper_name} />
             </h1>
             <p className="mt-1.5 text-center text-[8pt] tracking-[0.3em] uppercase">
               Your trusted source for breaking news
@@ -307,7 +364,9 @@ function Sheet({ page, totalPages, edition, sections }) {
           </>
         ) : (
           <div className="flex items-end justify-between text-[9pt]">
-            <span className="font-serif text-[14pt] leading-none">{edition?.newspaper_name}</span>
+            <span className="font-serif text-[14pt] leading-none">
+              <Masthead name={edition?.newspaper_name} />
+            </span>
             <span className="uppercase">
               {page.name} · Page {page.page_number}
             </span>
