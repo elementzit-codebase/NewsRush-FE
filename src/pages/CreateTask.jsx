@@ -71,7 +71,6 @@ export default function CreateTask() {
   const [sections, setSections] = useState({})
   const [pageIndex, setPageIndex] = useState(0)
   const [activeKey, setActiveKey] = useState(PAGES[0].blocks[0].section_key)
-  const [tab, setTab] = useState('text')
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -803,97 +802,85 @@ export default function CreateTask() {
                 />
               </label>
 
-              <div className="mt-5 flex border-b border-line" role="tablist">
-                <Tab active={tab === 'text'} onClick={() => setTab('text')} icon={PencilIcon}>
-                  Type Text
-                </Tab>
-                <Tab active={tab === 'voice'} onClick={() => setTab('voice')} icon={MicIcon}>
-                  Record Voice
-                </Tab>
-              </div>
-
-              <div className="mt-3 rounded-xl border border-line bg-white p-4">
-                {/* The textarea holds only saved text. An in-progress phrase is
-                    shown beneath it instead of inside the value, so typing
-                    mid-phrase cannot bake the interim text into the content and
-                    duplicate it when the final result lands. */}
+              {/* Unified Body Text & Voice Dictation Input (WhatsApp style) */}
+              <div className="mt-5 rounded-2xl border border-line bg-white p-4 transition-all focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/10 shadow-xs">
+                {/* Textarea for typing */}
                 <textarea
                   value={activeSection.content}
                   onChange={(e) =>
                     editSection(activeKey, { content: e.target.value.slice(0, charLimit) })
                   }
-                  placeholder="Type the section body, or dictate it..."
-                  rows={11}
+                  placeholder="Type section body, or hold the mic below to speak..."
+                  rows={9}
                   aria-label={'Body text for ' + activeName}
-                  className="scroll-thin h-[260px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
+                  className="scroll-thin h-[220px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
                 />
-                {speech.interim && (
-                  <p className="text-[15px] leading-relaxed text-slate-400 italic">
-                    {speech.interim}
-                  </p>
-                )}
-                <p className="text-right text-[13px] text-muted">
-                  {activeSection.content.length}/{charLimit}
-                </p>
-              </div>
 
-              {tab === 'voice' &&
-                (speech.supported ? (
-                  <>
-                    <div className="mt-4 flex items-center gap-4 rounded-xl border border-line bg-white px-4 py-3">
+                {/* Interim spoken transcript preview */}
+                {speech.interim && (
+                  <div className="mt-2 flex items-center gap-2 rounded-xl bg-brand-50/80 px-3 py-2 text-[14px] text-brand-700 italic border border-brand-100">
+                    <span className="size-2 rounded-full bg-brand-500 animate-pulse shrink-0" />
+                    <span className="truncate">{speech.interim}</span>
+                  </div>
+                )}
+
+                {/* Bottom Action Bar (WhatsApp Chat Style) */}
+                <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                  {speech.listening ? (
+                    <div className="flex flex-1 items-center gap-3 min-w-0">
+                      <span className="size-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                      <span className="text-[14px] font-semibold text-red-600 tabular-nums shrink-0">
+                        {speech.elapsed}
+                      </span>
+                      <Waveform
+                        bars={24}
+                        animated={speech.listening}
+                        level={mic.level}
+                        className="flex-1 max-w-[160px]"
+                        color="bg-red-500"
+                      />
+                      <span className="hidden text-[12px] font-medium text-red-600 sm:inline truncate">
+                        {mic.hasSound ? 'Recording…' : 'No sound detected'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-[13px] text-muted">
+                      <span className={activeSection.content.length >= charLimit ? 'font-semibold text-amber-600' : ''}>
+                        {activeSection.content.length}/{charLimit} chars
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Mic Button */}
+                  {speech.supported ? (
+                    <div className="relative group">
                       <button
                         type="button"
                         onPointerDown={handlePointerDown}
                         onPointerUp={handlePointerUp}
                         onPointerCancel={handlePointerUp}
-                        // Space and Enter fire as press-and-hold too, so the
-                        // control is usable without a pointer.
                         onKeyDown={handleKeyDown}
                         onKeyUp={handleKeyUp}
-                        // Losing focus mid-hold would otherwise leave the
-                        // microphone open with no way to release it.
                         onBlur={stopRecording}
-                        aria-label="Hold to record"
-                        aria-describedby="hold-to-record-hint"
-                        // Stops a long press from selecting text or scrolling
-                        // the page on touch devices.
+                        aria-label="Hold to record voice"
+                        title={speech.listening ? 'Release to stop recording' : 'Hold to record voice'}
                         className={[
-                          'grid size-12 shrink-0 touch-none place-items-center rounded-full text-white transition select-none',
+                          'grid size-11 shrink-0 touch-none place-items-center rounded-full text-white transition-all select-none shadow-sm',
                           speech.listening
-                            ? 'scale-110 bg-red-500 ring-4 ring-red-200'
-                            : 'bg-brand-500 hover:bg-brand-600',
+                            ? 'scale-110 bg-red-500 ring-4 ring-red-200 animate-pulse'
+                            : 'bg-brand-500 hover:bg-brand-600 active:scale-95',
                         ].join(' ')}
                       >
-                        <MicIcon className="size-6" />
+                        <MicIcon className="size-5" />
                       </button>
-                      <Waveform
-                        bars={30}
-                        animated={speech.listening}
-                        level={mic.level}
-                        className="flex-1"
-                        color={speech.listening ? 'bg-brand-500' : 'bg-slate-300'}
-                      />
-                      <span className="shrink-0 text-[15px] tabular-nums text-muted">
-                        {speech.elapsed}
-                      </span>
                     </div>
-
-                    {/* The meter reads the mic directly, so a flat bar while
-                        recording means no audio is arriving at all. */}
-                    <p id="hold-to-record-hint" className="mt-2 text-[13px] text-muted">
-                      {!speech.listening
-                        ? 'Hold the microphone to record. Release to stop.'
-                        : mic.hasSound
-                          ? 'Recording — keep holding. Release when you are done.'
-                          : 'No sound detected. Check the microphone is unmuted and selected.'}
-                    </p>
-                  </>
-                ) : (
-                  <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-                    Voice dictation needs the Web Speech API, which this browser does not provide.
-                    Chrome or Edge support it; Firefox does not. Use the Type Text tab instead.
-                  </p>
-                ))}
+                  ) : (
+                    <span title="Voice dictation not supported in this browser" className="text-muted opacity-40">
+                      <MicIcon className="size-5" />
+                    </span>
+                  )}
+                </div>
+              </div>
 
               {(speech.error || mic.error || notice) && (
                 <p role="alert" className="mt-3 rounded-lg bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
@@ -935,16 +922,6 @@ export default function CreateTask() {
                 <CheckIcon className="size-5" />
                 {activeSection.status === 'completed' ? 'Reopen as draft' : 'Mark section complete'}
               </button>
-
-              <div className="mt-5 flex gap-3 border-t border-line pt-5 text-[14px] leading-relaxed text-muted">
-                <InfoIcon className="mt-0.5 size-5 shrink-0" />
-                <p>
-                  <span className="font-medium text-ink">Tip:</span> Edits save automatically two
-                  seconds after you stop typing or dictating. The limit above is the capacity of
-                  this section's box on the printed tabloid sheet, so "Expand to fit" asks the AI
-                  for copy that fills the page rather than leaving it half empty.
-                </p>
-              </div>
             </section>
           </div>
         </main>
@@ -971,23 +948,5 @@ function SaveIndicator({ state }) {
     >
       {LABELS[state]}
     </span>
-  )
-}
-
-function Tab({ active, onClick, icon: Icon, children }) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={[
-        '-mb-px inline-flex flex-1 items-center justify-center gap-2 border-b-2 pb-3 text-[15px] font-medium transition',
-        active ? 'border-brand-500 text-brand-600' : 'border-transparent text-muted hover:text-ink',
-      ].join(' ')}
-    >
-      <Icon className="size-5" />
-      {children}
-    </button>
   )
 }
