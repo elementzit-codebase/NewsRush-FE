@@ -5,7 +5,6 @@ import EditionCard from '../components/EditionCard'
 import NewEditionDialog from '../components/NewEditionDialog'
 import Sidebar from '../components/Sidebar'
 import {
-  BellIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -143,14 +142,6 @@ export default function Workspace() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-6 px-8 py-6 lg:px-12">
-          <button
-            type="button"
-            aria-label="Notifications"
-            className="relative rounded-xl p-2 text-ink transition hover:bg-navy-50"
-          >
-            <BellIcon className="size-6" />
-          </button>
-
           <div className="flex items-center gap-3">
             <Link to="/profile" className="flex items-center gap-3" title="Your profile">
               <Avatar user={user} className="size-11 text-[17px]" />
