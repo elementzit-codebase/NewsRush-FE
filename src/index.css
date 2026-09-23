@@ -92,3 +92,9 @@ body {
   /* Print backgrounds and rules as designed rather than dropping them. */
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+@keyframes toast-shrink {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+

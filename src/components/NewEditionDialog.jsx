@@ -3,8 +3,6 @@ import { useEffect, useState } from 'react'
 /** The server stores `date` as a calendar date, so the input value is used raw. */
 const today = () => new Date().toISOString().slice(0, 10)
 
-const LABEL_SUGGESTIONS = ['Evening', 'Morning', 'City', 'Weekend', 'Special']
-
 /** Fixed for every edition; not exposed in the form. */
 const NEWSPAPER_NAME = 'NewsRush Daily'
 
@@ -78,14 +76,8 @@ export default function NewEditionDialog({ onCancel, onCreate }) {
             onChange={(e) => setEditionLabel(e.target.value)}
             required
             maxLength={100}
-            list="edition-labels"
             className="mt-1.5 w-full rounded-xl border border-line px-4 py-3 text-[15px] outline-none focus:border-brand-500"
           />
-          <datalist id="edition-labels">
-            {LABEL_SUGGESTIONS.map((label) => (
-              <option key={label} value={label} />
-            ))}
-          </datalist>
         </label>
 
         {error && (

@@ -12,6 +12,7 @@ import {
   PencilIcon,
   PrinterIcon,
   SparkleIcon,
+  XIcon,
 } from '../components/Icons'
 import { ALL_BLOCKS, PAGES, TOTAL_SECTIONS, blockFor } from '../data/sections'
 import * as api from '../lib/api'
@@ -79,6 +80,15 @@ export default function CreateTask() {
   const [generating, setGenerating] = useState(false)
   const [validation, setValidation] = useState(null)
   const [fill, setFill] = useState({ running: false, done: 0, total: 0, failed: [] })
+
+  // Auto-dismiss readiness check toast notification after 6 seconds
+  useEffect(() => {
+    if (!validation) return undefined
+    const timer = setTimeout(() => {
+      setValidation(null)
+    }, 6000)
+    return () => clearTimeout(timer)
+  }, [validation])
 
   // Read inside the fill loop, so cancelling takes effect on the next section
   // rather than waiting for a re-render.
@@ -391,14 +401,16 @@ export default function CreateTask() {
     editSection(activeKey, { status: next })
     clearTimeout(timerRef.current)
     await flush(activeKey)
-    await refreshValidation()
+    await refreshValidation(false)
   }
 
-  const refreshValidation = useCallback(async () => {
+  const refreshValidation = useCallback(async (showToast = false) => {
     if (!editionId) return
     try {
       const result = await api.validateEdition(editionId)
-      setValidation(result)
+      if (showToast) {
+        setValidation(result)
+      }
       // /validate also moves the edition between in_progress and ready.
       const fresh = await api.getEdition(editionId)
       setEdition(fresh)
@@ -579,7 +591,7 @@ export default function CreateTask() {
 
             <button
               type="button"
-              onClick={refreshValidation}
+              onClick={() => refreshValidation(true)}
               className="inline-flex items-center gap-3 rounded-xl bg-navy-900 px-6 py-3.5 text-[16px] font-semibold text-white transition hover:bg-navy-700"
             >
               Check readiness
@@ -597,39 +609,104 @@ export default function CreateTask() {
             sections completed
           </p>
 
+          {/* Floating Toast Notification for Readiness Check */}
           {validation && (
             <div
+              role="alert"
+              aria-live="polite"
               className={[
-                'shrink-0 mt-5 rounded-xl border px-5 py-4 text-[15px]',
+                'fixed top-6 right-6 z-50 w-full max-w-md overflow-hidden rounded-2xl border shadow-2xl backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-5',
                 validation.all_completed
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                  : 'border-amber-200 bg-amber-50 text-amber-800',
+                  ? 'border-emerald-200 bg-white/95 text-emerald-950 shadow-emerald-900/10'
+                  : 'border-amber-200 bg-white/95 text-amber-950 shadow-amber-900/10',
               ].join(' ')}
             >
-              {validation.all_completed ? (
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <p>All 19 sections are complete — this edition is ready to print.</p>
-                  <Link
-                    to={'/print?edition=' + editionId}
-                    className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-[15px] font-semibold text-white transition hover:bg-emerald-700"
+              {/* Toast Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5 bg-slate-50/60">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={[
+                      'flex size-7 items-center justify-center rounded-full text-white',
+                      validation.all_completed ? 'bg-emerald-600' : 'bg-amber-500',
+                    ].join(' ')}
                   >
-                    <PrinterIcon className="size-5" />
-                    Print edition
-                  </Link>
+                    {validation.all_completed ? (
+                      <CheckIcon className="size-4" />
+                    ) : (
+                      <InfoIcon className="size-4" />
+                    )}
+                  </div>
+                  <span className="text-[14px] font-bold tracking-tight text-navy-900">
+                    {validation.all_completed ? 'Readiness Check Passed' : 'Readiness Check'}
+                  </span>
                 </div>
-              ) : (
-                <>
-                  <p className="font-semibold">
-                    {validation.incomplete_sections.length} section
-                    {validation.incomplete_sections.length === 1 ? '' : 's'} still incomplete:
-                  </p>
-                  <p className="mt-1">
-                    {validation.incomplete_sections
-                      .map((s) => 'p' + s.page_number + ' ' + s.section_name)
-                      .join(', ')}
-                  </p>
-                </>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setValidation(null)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition"
+                  aria-label="Close notification"
+                >
+                  <XIcon className="size-4" />
+                </button>
+              </div>
+
+              {/* Toast Body */}
+              <div className="p-5 text-[14px]">
+                {validation.all_completed ? (
+                  <div>
+                    <p className="font-medium text-slate-800">
+                      All 19 sections are complete — this edition is ready to print.
+                    </p>
+                    <Link
+                      to={'/print?edition=' + editionId}
+                      className="mt-3.5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-[14px] font-semibold text-white transition hover:bg-emerald-700 shadow-sm"
+                    >
+                      <PrinterIcon className="size-4" />
+                      Print edition
+                    </Link>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-amber-950 text-[14px]">
+                        {validation.incomplete_sections.length} section
+                        {validation.incomplete_sections.length === 1 ? '' : 's'} still incomplete:
+                      </p>
+                      <span className="text-[11px] font-semibold text-amber-700 bg-amber-100/90 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Click to jump
+                      </span>
+                    </div>
+
+                    <div className="mt-3 max-h-48 overflow-y-auto scroll-thin pr-1 flex flex-wrap gap-1.5">
+                      {validation.incomplete_sections.map((s) => (
+                        <button
+                          key={s.section_key}
+                          type="button"
+                          onClick={() => {
+                            selectPage(s.page_number - 1)
+                            selectSection(s.section_key)
+                          }}
+                          title={`Jump to Page ${s.page_number}: ${s.section_name}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200/80 bg-amber-50/90 px-2.5 py-1 text-[13px] font-medium text-amber-900 transition hover:bg-amber-100 hover:border-amber-300 hover:shadow-sm active:scale-95 text-left"
+                        >
+                          <span className="rounded bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-amber-900">
+                            P{s.page_number}
+                          </span>
+                          <span>{s.section_name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Animated Progress Bar */}
+              <div className="w-full bg-slate-100 h-1">
+                <div
+                  className={validation.all_completed ? 'h-full bg-emerald-500' : 'h-full bg-amber-500'}
+                  style={{ animation: 'toast-shrink 6s linear forwards' }}
+                />
+              </div>
             </div>
           )}
 

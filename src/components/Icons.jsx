@@ -114,3 +114,7 @@ export const LogoutIcon = (p) => (
 export const PrinterIcon = (p) => (
   <Svg {...p}><path d="M7 9V3.5h10V9" /><rect x="3.5" y="9" width="17" height="7.5" rx="2" /><path d="M7 14h10v6.5H7Z" /></Svg>
 )
+export const XIcon = (p) => (
+  <Svg {...p}><path d="M18 6 6 18M6 6l12 12" /></Svg>
+)
+
