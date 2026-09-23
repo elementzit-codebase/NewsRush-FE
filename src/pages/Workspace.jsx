@@ -11,7 +11,6 @@ import {
   ChevronRightIcon,
   GridIcon,
   ListIcon,
-  LogoutIcon,
   PlusIcon,
   SearchIcon,
 } from '../components/Icons'
@@ -28,7 +27,7 @@ const countCompleted = (sections = []) =>
 
 export default function Workspace() {
   const navigate = useNavigate()
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
 
   const [editions, setEditions] = useState([])
   const [progress, setProgress] = useState({})
@@ -36,7 +35,6 @@ export default function Workspace() {
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
   const [deletingEdition, setDeletingEdition] = useState(null)
-  const [signingOut, setSigningOut] = useState(false)
 
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
@@ -86,18 +84,6 @@ export default function Workspace() {
   const onSort = changeAndReset(setSort)
   const onPerPage = changeAndReset(setPerPage)
 
-  async function handleSignOut() {
-    // Guarded because logout revokes the refresh token server-side; a double
-    // click would send the second request with a token already spent.
-    if (signingOut) return
-    setSigningOut(true)
-    try {
-      await signOut()
-    } finally {
-      setSigningOut(false)
-    }
-  }
-
   async function handleCreate(values) {
     const edition = await api.createEdition(values)
     setCreating(false)
@@ -143,34 +129,26 @@ export default function Workspace() {
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-end gap-6 px-8 py-6 lg:px-12">
-          <div className="flex items-center gap-3">
-            <Link to="/profile" className="flex items-center gap-3" title="Your profile">
-              <Avatar user={user} className="size-11 text-[17px]" />
-              <span className="hidden text-right sm:block">
-                <span className="block font-semibold text-ink">
-                  {user?.first_name} {user?.last_name}
-                </span>
-                <span className="block text-sm text-muted">
-                  {user?.is_system_user ? 'System user' : 'Editor'}
-                </span>
+        <header className="flex h-[76px] items-center justify-end border-b border-line px-8 lg:px-12">
+          <Link
+            to="/profile"
+            className="flex items-center gap-3 rounded-2xl px-3 py-1.5 transition hover:bg-slate-50"
+            title="Your profile"
+          >
+            <Avatar user={user} className="size-10 text-[15px]" />
+            <span className="hidden text-right sm:block">
+              <span className="block text-[14px] font-semibold text-ink leading-tight">
+                {user?.first_name} {user?.last_name}
               </span>
-            </Link>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              disabled={signingOut}
-              title="Sign out"
-              className="inline-flex items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-[15px] font-medium text-ink transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            >
-              <LogoutIcon className="size-5" />
-              {signingOut ? 'Signing out…' : 'Sign out'}
-            </button>
-          </div>
+              <span className="block text-[12px] font-medium text-muted mt-0.5">
+                {user?.is_system_user ? 'System user' : 'Editor'}
+              </span>
+            </span>
+          </Link>
         </header>
 
-        <main className="min-w-0 flex-1 px-8 pb-10 lg:px-12">
-          <div className="flex flex-wrap items-start justify-between gap-6">
+        <main className="min-w-0 flex-1 px-8 py-8 lg:px-12">
+          <div className="flex flex-wrap items-center justify-between gap-6">
             <div>
               <h1 className="text-[clamp(28px,3vw,40px)] font-bold text-navy-900">News Workspace</h1>
               <p className="mt-2 text-[17px] text-muted">
@@ -180,7 +158,7 @@ export default function Workspace() {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="inline-flex items-center gap-3 rounded-xl bg-navy-900 px-6 py-4 text-[16px] font-semibold text-white transition hover:bg-navy-700"
+              className="inline-flex items-center gap-2.5 rounded-xl bg-navy-900 px-6 py-3.5 text-[15px] font-semibold text-white shadow-sm transition hover:bg-navy-700"
             >
               <PlusIcon className="size-5" />
               New Edition

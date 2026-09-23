@@ -48,6 +48,9 @@ export const ChevronRightIcon = (p) => (
 export const ChevronsRightIcon = (p) => (
   <Svg {...p}><path d="m7 6 6 6-6 6M13 6l6 6-6 6" /></Svg>
 )
+export const ChevronsLeftIcon = (p) => (
+  <Svg {...p}><path d="m11 18-6-6 6-6M17 18l-6-6 6-6" /></Svg>
+)
 export const PlusIcon = (p) => (
   <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>
 )
