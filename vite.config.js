@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
   // port whenever 5173 is taken. Proxying instead of calling the API
   // cross-origin keeps requests same-origin, so the dev server works on
   // whatever port it lands on without touching the backend's config.
-  const target = env.API_PROXY_TARGET || 'http://127.0.0.1:8000'
+  const target = env.API_PROXY_TARGET || 'http://127.0.0.1:8001'
 
   return {
     plugins: [react(), tailwindcss()],
