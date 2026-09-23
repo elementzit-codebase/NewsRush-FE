@@ -212,6 +212,9 @@ export const listUsers = (status = 'all') =>
 /** PATCH /api/users/{id}/approve — system users only. */
 export const approveUser = (userId) => request(`/api/users/${userId}/approve`, { method: 'PATCH' })
 
+/** PATCH /api/users/{id}/reject — system users only. */
+export const rejectUser = (userId) => request(`/api/users/${userId}/reject`, { method: 'PATCH' })
+
 /** PATCH /api/users/me/password */
 export const changePassword = ({ currentPassword, newPassword }) =>
   request('/api/users/me/password', {

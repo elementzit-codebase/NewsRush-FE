@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import Avatar from '../components/Avatar'
+import RejectUserDialog from '../components/RejectUserDialog'
 import { CheckIcon } from '../components/Icons'
 import * as api from '../lib/api'
 
@@ -26,6 +27,7 @@ export default function Users() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(null)
+  const [rejectingUser, setRejectingUser] = useState(null)
 
   const load = useCallback(async (status) => {
     setLoading(true)
@@ -60,6 +62,13 @@ export default function Users() {
     } finally {
       setBusyId(null)
     }
+  }
+
+  async function handleConfirmReject() {
+    if (!rejectingUser) return
+    await api.rejectUser(rejectingUser.id)
+    setUsers((current) => current.filter((item) => item.id !== rejectingUser.id))
+    setRejectingUser(null)
   }
 
   return (
@@ -141,20 +150,39 @@ export default function Users() {
                     Approved
                   </span>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => approve(user)}
-                    disabled={busyId === user.id}
-                    className="rounded-xl bg-navy-900 px-5 py-3 text-[15px] font-semibold text-white transition hover:bg-navy-700 disabled:opacity-60"
-                  >
-                    {busyId === user.id ? 'Approving…' : 'Approve'}
-                  </button>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setRejectingUser(user)}
+                      disabled={busyId === user.id}
+                      className="rounded-xl border border-line px-4 py-2.5 text-[14px] font-medium text-red-600 transition hover:border-red-200 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => approve(user)}
+                      disabled={busyId === user.id}
+                      className="rounded-xl bg-navy-900 px-5 py-2.5 text-[14px] font-semibold text-white transition hover:bg-navy-700 disabled:opacity-60"
+                    >
+                      {busyId === user.id ? 'Approving…' : 'Approve'}
+                    </button>
+                  </div>
                 )}
               </li>
             ))}
           </ul>
         )}
       </main>
+
+      {rejectingUser && (
+        <RejectUserDialog
+          user={rejectingUser}
+          onCancel={() => setRejectingUser(null)}
+          onConfirm={handleConfirmReject}
+        />
+      )}
     </div>
   )
 }
+
