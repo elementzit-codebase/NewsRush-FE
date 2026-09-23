@@ -18,10 +18,17 @@ import { useAuth } from '../lib/auth'
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_BYTES = 5 * 1024 * 1024
 
-const formatDate = (value) =>
-  value
-    ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : '—'
+const formatDate = (value) => {
+  if (!value) return '—'
+  try {
+    const d = new Date(value)
+    return isNaN(d.getTime())
+      ? '—'
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  } catch {
+    return '—'
+  }
+}
 
 /**
  * Modern, polished Account & Profile management page.

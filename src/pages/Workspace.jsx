@@ -150,7 +150,7 @@ export default function Workspace() {
         <main className="min-w-0 flex-1 px-8 py-8 lg:px-12">
           <div className="flex flex-wrap items-center justify-between gap-6">
             <div>
-              <h1 className="text-[clamp(28px,3vw,40px)] font-bold text-navy-900">News Workspace</h1>
+              <h1 className="text-[clamp(28px,3vw,40px)] font-bold text-navy-900">Workspace</h1>
               <p className="mt-2 text-[17px] text-muted">
                 Create, dictate and compile 4-page evening editions.
               </p>
