@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import DeleteEditionDialog from '../components/DeleteEditionDialog'
 import EditionCard from '../components/EditionCard'
 import NewEditionDialog from '../components/NewEditionDialog'
 import Sidebar from '../components/Sidebar'
@@ -34,6 +35,7 @@ export default function Workspace() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
+  const [deletingEdition, setDeletingEdition] = useState(null)
   const [signingOut, setSigningOut] = useState(false)
 
   const [query, setQuery] = useState('')
@@ -102,15 +104,15 @@ export default function Workspace() {
     navigate('/create?edition=' + edition.id)
   }
 
-  async function handleDelete(edition) {
-    const question = 'Delete "' + edition.newspaper_name + '" and all of its sections?'
-    if (!window.confirm(question)) return
-    try {
-      await api.deleteEdition(edition.id)
-      setEditions((current) => current.filter((item) => item.id !== edition.id))
-    } catch (err) {
-      setError(err.message)
-    }
+  function handleDelete(edition) {
+    setDeletingEdition(edition)
+  }
+
+  async function handleConfirmDelete() {
+    if (!deletingEdition) return
+    await api.deleteEdition(deletingEdition.id)
+    setEditions((current) => current.filter((item) => item.id !== deletingEdition.id))
+    setDeletingEdition(null)
   }
 
   const visible = useMemo(() => {
@@ -350,6 +352,13 @@ export default function Workspace() {
       </div>
 
       {creating && <NewEditionDialog onCancel={() => setCreating(false)} onCreate={handleCreate} />}
+      {deletingEdition && (
+        <DeleteEditionDialog
+          edition={deletingEdition}
+          onCancel={() => setDeletingEdition(null)}
+          onConfirm={handleConfirmDelete}
+        />
+      )}
     </div>
   )
 }
