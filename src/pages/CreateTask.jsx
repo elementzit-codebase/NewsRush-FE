@@ -12,6 +12,8 @@ import {
   PencilIcon,
   PrinterIcon,
   SparkleIcon,
+  StopIcon,
+  TrashIcon,
   XIcon,
 } from '../components/Icons'
 import { ALL_BLOCKS, PAGES, TOTAL_SECTIONS, blockFor } from '../data/sections'
@@ -192,21 +194,71 @@ export default function CreateTask() {
   // Never leave an edit stranded in the debounce window.
   useEffect(() => () => clearTimeout(timerRef.current), [])
 
+  /* -------------------------------------------------------------- speech */
+
+  // Stores the recorded transcript for review before applying or discarding.
+  const [voiceDraft, setVoiceDraft] = useState('')
+
+  const handleSpeechResult = useCallback((phrase) => {
+    setVoiceDraft((prev) => (prev ? prev + ' ' + phrase : phrase))
+  }, [])
+
+  const speech = useSpeechRecognition({ onResult: handleSpeechResult })
+
+  // Runs alongside recognition purely to show that audio is arriving.
+  const mic = useMicLevel(speech.listening)
+
+  function handleStartRecording() {
+    if (speech.listening) return
+    setVoiceDraft('')
+    setNotice('')
+    speech.start()
+  }
+
+  function handleStopRecording() {
+    if (speech.interim && speech.interim.trim()) {
+      const pending = speech.interim.trim()
+      setVoiceDraft((prev) => (prev ? prev + ' ' + pending : pending))
+    }
+    speech.stop()
+  }
+
+  function handleDiscardVoice() {
+    if (speech.listening) {
+      speech.stop()
+    }
+    setVoiceDraft('')
+  }
+
+  function handleApplyVoice() {
+    if (!voiceDraft.trim()) return
+    const current = sections[activeKey]?.content ?? ''
+    const merged = (current ? current + ' ' + voiceDraft.trim() : voiceDraft.trim()).slice(0, charLimit)
+    editSection(activeKey, { content: merged })
+    setVoiceDraft('')
+  }
+
+  /* ----------------------------------------------------------- navigation */
+
   // Wrapped so the memoised canvas keeps a stable prop and does not re-render
   // every time the recorder reports a new level.
   const selectSection = useCallback(
     (sectionKey) => {
       clearTimeout(timerRef.current)
       flush(activeKey)
+      if (speech.listening) speech.stop()
+      setVoiceDraft('')
       setActiveKey(sectionKey)
       setNotice('')
     },
-    [flush, activeKey],
+    [flush, activeKey, speech],
   )
 
   function selectPage(index) {
     clearTimeout(timerRef.current)
     flush(activeKey)
+    if (speech.listening) speech.stop()
+    setVoiceDraft('')
     setPageIndex(index)
     setActiveKey(pages[index].blocks[0].section_key)
     setNotice('')
@@ -220,70 +272,6 @@ export default function CreateTask() {
    */
   function selectTemplate(pageNumber, templateKey) {
     setTemplates(writeTemplate(editionId, pageNumber, templateKey))
-  }
-
-  /* -------------------------------------------------------------- speech */
-
-  const appendPhrase = useCallback(
-    (phrase) => {
-      const current = sections[activeKey]?.content ?? ''
-      const merged = (current ? current + ' ' + phrase : phrase).slice(0, charLimit)
-      editSection(activeKey, { content: merged })
-    },
-    [activeKey, charLimit, editSection, sections],
-  )
-
-  // The hook holds `onResult` in a ref, so passing a fresh closure each render
-  // picks up the current section without restarting recognition.
-  const speech = useSpeechRecognition({ onResult: appendPhrase })
-
-  // Runs alongside recognition purely to show that audio is arriving.
-  const mic = useMicLevel(speech.listening)
-
-  /* Press-and-hold recording. Tracked in a ref rather than state because the
-     release handlers must see the current value synchronously, and a stray
-     release (pointercancel, blur, key-up without key-down) must be ignored
-     rather than stopping a recording it never started. */
-  const holdingRef = useRef(false)
-
-  function startRecording() {
-    if (holdingRef.current || speech.listening) return
-    holdingRef.current = true
-    speech.start()
-  }
-
-  function stopRecording() {
-    if (!holdingRef.current) return
-    holdingRef.current = false
-    speech.stop()
-  }
-
-  function handlePointerDown(event) {
-    // Capturing the pointer means the release still arrives even if the finger
-    // slides off the button, which would otherwise strand the mic open.
-    event.currentTarget.setPointerCapture?.(event.pointerId)
-    startRecording()
-  }
-
-  function handlePointerUp(event) {
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    stopRecording()
-  }
-
-  function handleKeyDown(event) {
-    if (event.key !== ' ' && event.key !== 'Enter') return
-    // Holding a key auto-repeats keydown; only the first should start.
-    event.preventDefault()
-    if (event.repeat) return
-    startRecording()
-  }
-
-  function handleKeyUp(event) {
-    if (event.key !== ' ' && event.key !== 'Enter') return
-    event.preventDefault()
-    stopRecording()
   }
 
   /* ------------------------------------------------------------------ ai */
@@ -802,7 +790,7 @@ export default function CreateTask() {
                 />
               </label>
 
-              {/* Unified Body Text & Voice Dictation Input (WhatsApp style) */}
+              {/* Unified Body Text & Voice Dictation Input */}
               <div className="mt-5 rounded-2xl border border-line bg-white p-4 transition-all focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/10 shadow-xs">
                 {/* Textarea for typing */}
                 <textarea
@@ -810,76 +798,148 @@ export default function CreateTask() {
                   onChange={(e) =>
                     editSection(activeKey, { content: e.target.value.slice(0, charLimit) })
                   }
-                  placeholder="Type section body, or hold the mic below to speak..."
-                  rows={9}
+                  placeholder="Type section body, or record voice below..."
+                  rows={8}
                   aria-label={'Body text for ' + activeName}
-                  className="scroll-thin h-[220px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
+                  className="scroll-thin h-[200px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
                 />
 
-                {/* Interim spoken transcript preview */}
-                {speech.interim && (
-                  <div className="mt-2 flex items-center gap-2 rounded-xl bg-brand-50/80 px-3 py-2 text-[14px] text-brand-700 italic border border-brand-100">
-                    <span className="size-2 rounded-full bg-brand-500 animate-pulse shrink-0" />
-                    <span className="truncate">{speech.interim}</span>
+                {/* --- 1. ACTIVE RECORDING STATE --- */}
+                {speech.listening && (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50/80 p-2.5 shadow-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      {/* Left: timer and compact waveform in single row */}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="relative flex size-2.5 shrink-0">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                          <span className="relative inline-flex size-2.5 rounded-full bg-red-500" />
+                        </span>
+                        <span className="text-[14px] font-bold text-red-600 tabular-nums shrink-0">
+                          {speech.elapsed}
+                        </span>
+                        <Waveform
+                          bars={10}
+                          animated={speech.listening}
+                          level={mic.level}
+                          className="h-5 shrink-0"
+                          color="bg-red-500"
+                        />
+                      </div>
+
+                      {/* Right: Icon-only Cancel & Stop buttons in single row */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleDiscardVoice}
+                          title="Cancel recording"
+                          aria-label="Cancel recording"
+                          className="grid size-8 place-items-center rounded-lg border border-red-200 bg-white text-red-600 shadow-xs transition hover:bg-red-50 active:scale-95 shrink-0"
+                        >
+                          <TrashIcon className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleStopRecording}
+                          title="Stop recording"
+                          aria-label="Stop recording"
+                          className="grid size-8 place-items-center rounded-lg bg-red-600 text-white shadow-xs transition hover:bg-red-700 active:scale-95 shrink-0"
+                        >
+                          <StopIcon className="size-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Live speech transcript preview */}
+                    {(voiceDraft || speech.interim) && (
+                      <div className="mt-2 rounded-lg border border-red-100 bg-white/95 p-2.5 text-[13px] leading-relaxed text-navy-900 shadow-xs">
+                        <span>{voiceDraft} </span>
+                        {speech.interim && (
+                          <span className="text-red-500 italic opacity-85">{speech.interim}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Bottom Action Bar (WhatsApp Chat Style) */}
-                <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                  {speech.listening ? (
-                    <div className="flex flex-1 items-center gap-3 min-w-0">
-                      <span className="size-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-                      <span className="text-[14px] font-semibold text-red-600 tabular-nums shrink-0">
-                        {speech.elapsed}
-                      </span>
-                      <Waveform
-                        bars={24}
-                        animated={speech.listening}
-                        level={mic.level}
-                        className="flex-1 max-w-[160px]"
-                        color="bg-red-500"
-                      />
-                      <span className="hidden text-[12px] font-medium text-red-600 sm:inline truncate">
-                        {mic.hasSound ? 'Recording…' : 'No sound detected'}
+                {/* --- 2. REVIEW & DECIDE STATE (APPLY OR DELETE) --- */}
+                {!speech.listening && voiceDraft.trim().length > 0 && (
+                  <div className="mt-3 rounded-xl border border-brand-200 bg-brand-50/70 p-3 shadow-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-brand-900">
+                        <MicIcon className="size-4 text-brand-600" />
+                        <span className="text-[13px] font-bold tracking-wide">
+                          Recorded Voice
+                        </span>
+                      </div>
+                      <span className="text-[12px] font-medium text-muted">
+                        {voiceDraft.length} chars
                       </span>
                     </div>
-                  ) : (
+
+                    {/* Editable / viewable transcript */}
+                    <div className="mt-2">
+                      <textarea
+                        value={voiceDraft}
+                        onChange={(e) => setVoiceDraft(e.target.value)}
+                        rows={2}
+                        placeholder="Transcribed text..."
+                        className="w-full rounded-lg border border-brand-200 bg-white p-2.5 text-[14px] leading-relaxed text-navy-900 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20"
+                      />
+                    </div>
+
+                    {/* Action buttons: Delete or Apply */}
+                    <div className="mt-2.5 flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDiscardVoice}
+                        title="Delete transcript"
+                        aria-label="Delete transcript"
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-rose-600 shadow-xs transition hover:bg-rose-50 active:scale-95"
+                      >
+                        <TrashIcon className="size-3.5" />
+                        <span>Delete</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApplyVoice}
+                        title="Apply text to section"
+                        aria-label="Apply text to section"
+                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-xs transition hover:bg-emerald-700 active:scale-95"
+                      >
+                        <CheckIcon className="size-3.5" />
+                        <span>Apply</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* --- 3. IDLE BOTTOM ACTION BAR --- */}
+                {!speech.listening && !voiceDraft.trim() && (
+                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
                     <div className="flex items-center gap-2 text-[13px] text-muted">
                       <span className={activeSection.content.length >= charLimit ? 'font-semibold text-amber-600' : ''}>
                         {activeSection.content.length}/{charLimit} chars
                       </span>
                     </div>
-                  )}
 
-                  {/* Mic Button */}
-                  {speech.supported ? (
-                    <div className="relative group">
+                    {speech.supported ? (
                       <button
                         type="button"
-                        onPointerDown={handlePointerDown}
-                        onPointerUp={handlePointerUp}
-                        onPointerCancel={handlePointerUp}
-                        onKeyDown={handleKeyDown}
-                        onKeyUp={handleKeyUp}
-                        onBlur={stopRecording}
-                        aria-label="Hold to record voice"
-                        title={speech.listening ? 'Release to stop recording' : 'Hold to record voice'}
-                        className={[
-                          'grid size-11 shrink-0 touch-none place-items-center rounded-full text-white transition-all select-none shadow-sm',
-                          speech.listening
-                            ? 'scale-110 bg-red-500 ring-4 ring-red-200 animate-pulse'
-                            : 'bg-brand-500 hover:bg-brand-600 active:scale-95',
-                        ].join(' ')}
+                        onClick={handleStartRecording}
+                        aria-label="Click to start voice recording"
+                        title="Click to start voice recording"
+                        className="grid size-9 place-items-center rounded-full bg-brand-500 text-white transition hover:bg-brand-600 active:scale-95 shadow-xs"
                       >
-                        <MicIcon className="size-5" />
+                        <MicIcon className="size-4.5" />
                       </button>
-                    </div>
-                  ) : (
-                    <span title="Voice dictation not supported in this browser" className="text-muted opacity-40">
-                      <MicIcon className="size-5" />
-                    </span>
-                  )}
-                </div>
+                    ) : (
+                      <span title="Voice dictation not supported in this browser" className="text-muted text-[13px] opacity-60 flex items-center gap-1.5">
+                        <MicIcon className="size-4" />
+                        <span>Voice not supported</span>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {(speech.error || mic.error || notice) && (

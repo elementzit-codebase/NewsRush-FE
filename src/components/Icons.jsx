@@ -144,6 +144,9 @@ export const ZoomOutIcon = (p) => (
 export const RefreshCwIcon = (p) => (
   <Svg {...p}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 16h5v5" /></Svg>
 )
+export const StopIcon = (p) => (
+  <Svg {...p}><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" /></Svg>
+)
 
 
 
