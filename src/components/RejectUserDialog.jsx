@@ -77,9 +77,10 @@ export default function RejectUserDialog({ user, onCancel, onConfirm }) {
         </div>
 
         {error && (
-          <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-700">
-            {error}
-          </p>
+          <div role="alert" className="mt-4 flex items-center gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-700">
+            <AlertTriangleIcon className="size-4 shrink-0" />
+            <span>{error}</span>
+          </div>
         )}
 
         <div className="mt-7 flex items-center justify-end gap-3">

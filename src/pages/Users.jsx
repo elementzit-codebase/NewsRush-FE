@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import Avatar from '../components/Avatar'
 import RejectUserDialog from '../components/RejectUserDialog'
+import Toast from '../components/Toast'
 import { CheckIcon } from '../components/Icons'
 import * as api from '../lib/api'
 
@@ -26,6 +27,7 @@ export default function Users() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [toast, setToast] = useState(null)
   const [busyId, setBusyId] = useState(null)
   const [rejectingUser, setRejectingUser] = useState(null)
 
@@ -46,6 +48,7 @@ export default function Users() {
   }, [filter, load])
 
   async function approve(user) {
+    const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || 'User'
     setBusyId(user.id)
     setError('')
     try {
@@ -57,8 +60,16 @@ export default function Users() {
           ? current.filter((item) => item.id !== user.id)
           : current.map((item) => (item.id === user.id ? updated : item)),
       )
+      setToast({
+        type: 'success',
+        message: `${fullName} has been approved successfully.`,
+      })
     } catch (err) {
       setError(err.message)
+      setToast({
+        type: 'error',
+        message: err.message || `Failed to approve ${fullName}.`,
+      })
     } finally {
       setBusyId(null)
     }
@@ -66,9 +77,22 @@ export default function Users() {
 
   async function handleConfirmReject() {
     if (!rejectingUser) return
-    await api.rejectUser(rejectingUser.id)
-    setUsers((current) => current.filter((item) => item.id !== rejectingUser.id))
-    setRejectingUser(null)
+    const fullName = [rejectingUser.first_name, rejectingUser.last_name].filter(Boolean).join(' ') || 'User'
+    try {
+      await api.rejectUser(rejectingUser.id)
+      setUsers((current) => current.filter((item) => item.id !== rejectingUser.id))
+      setRejectingUser(null)
+      setToast({
+        type: 'success',
+        message: `Registration for ${fullName} was rejected.`,
+      })
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err.message || `Failed to reject registration for ${fullName}.`,
+      })
+      throw err
+    }
   }
 
   return (
@@ -180,6 +204,13 @@ export default function Users() {
           user={rejectingUser}
           onCancel={() => setRejectingUser(null)}
           onConfirm={handleConfirmReject}
+        />
+      )}
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
         />
       )}
     </div>
