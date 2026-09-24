@@ -5,6 +5,7 @@ import DeleteEditionDialog from '../components/DeleteEditionDialog'
 import EditionCard from '../components/EditionCard'
 import NewEditionDialog from '../components/NewEditionDialog'
 import Sidebar from '../components/Sidebar'
+import Toast from '../components/Toast'
 import {
   ChevronDownIcon,
   ChevronLeftIcon,
@@ -33,6 +34,7 @@ export default function Workspace() {
   const [progress, setProgress] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [toast, setToast] = useState(null)
   const [creating, setCreating] = useState(false)
   const [deletingEdition, setDeletingEdition] = useState(null)
 
@@ -96,9 +98,22 @@ export default function Workspace() {
 
   async function handleConfirmDelete() {
     if (!deletingEdition) return
-    await api.deleteEdition(deletingEdition.id)
-    setEditions((current) => current.filter((item) => item.id !== deletingEdition.id))
-    setDeletingEdition(null)
+    const name = deletingEdition.newspaper_name || 'Edition'
+    try {
+      await api.deleteEdition(deletingEdition.id)
+      setEditions((current) => current.filter((item) => item.id !== deletingEdition.id))
+      setDeletingEdition(null)
+      setToast({
+        type: 'success',
+        message: `“${name}” was deleted successfully.`,
+      })
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err.message || `Failed to delete “${name}”.`,
+      })
+      throw err
+    }
   }
 
   const visible = useMemo(() => {
@@ -335,6 +350,13 @@ export default function Workspace() {
           edition={deletingEdition}
           onCancel={() => setDeletingEdition(null)}
           onConfirm={handleConfirmDelete}
+        />
+      )}
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
         />
       )}
     </div>

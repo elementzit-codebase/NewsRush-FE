@@ -62,22 +62,21 @@ export default function DeleteEditionDialog({ edition, onCancel, onConfirm }) {
             Delete Edition
           </h2>
           <p id="delete-edition-desc" className="mt-2 text-[15px] leading-relaxed text-muted">
-            Are you sure you want to delete? {' '}This will also permanently delete all sections associated with this edition.
-            {/* <span className="font-semibold text-ink">"{edition?.newspaper_name}"</span> */}
-            {/* {edition?.edition_label ? ` (${edition.edition_label})` : ''}? */}
+            Are you sure you want to delete{' '}
+            {edition?.newspaper_name ? (
+              <strong className="font-semibold text-ink">“{edition.newspaper_name}”</strong>
+            ) : (
+              'this edition'
+            )}
+            {edition?.edition_label ? ` (${edition.edition_label})` : ''}? This will permanently delete all pages and sections associated with it.
           </p>
         </div>
 
-        {/* <div className="mt-4 rounded-xl border border-red-100 bg-red-50/60 p-3.5">
-          <p className="text-[13px] leading-normal text-red-800">
-            <strong className="font-semibold">Warning:</strong> All 4 pages, articles, and audio dictations associated with this edition will be permanently removed. This action cannot be undone.
-          </p>
-        </div> */}
-
         {error && (
-          <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-700">
-            {error}
-          </p>
+          <div role="alert" className="mt-4 flex items-center gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-700">
+            <AlertTriangleIcon className="size-4 shrink-0" />
+            <span>{error}</span>
+          </div>
         )}
 
         <div className="mt-7 flex items-center justify-end gap-3">
