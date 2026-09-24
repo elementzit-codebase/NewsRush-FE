@@ -123,6 +123,28 @@ export const AlertTriangleIcon = (p) => (
 export const XIcon = (p) => (
   <Svg {...p}><path d="M18 6 6 18M6 6l12 12" /></Svg>
 )
+export const FlipHorizontalIcon = (p) => (
+  <Svg {...p}><path d="M12 3v18M16 7l5 5-5 5V7Z" /><path d="M8 7 3 12l5 5V7Z" /></Svg>
+)
+export const FlipVerticalIcon = (p) => (
+  <Svg {...p}><path d="M3 12h18M7 16l5 5 5-5H7Z" /><path d="M7 8l5-5 5 5H7Z" /></Svg>
+)
+export const RotateLeftIcon = (p) => (
+  <Svg {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></Svg>
+)
+export const RotateRightIcon = (p) => (
+  <Svg {...p}><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></Svg>
+)
+export const ZoomInIcon = (p) => (
+  <Svg {...p}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5M11 8v6M8 11h6" /></Svg>
+)
+export const ZoomOutIcon = (p) => (
+  <Svg {...p}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5M8 11h6" /></Svg>
+)
+export const RefreshCwIcon = (p) => (
+  <Svg {...p}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 16h5v5" /></Svg>
+)
+
 
 
 

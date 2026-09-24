@@ -1,12 +1,11 @@
 import { useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import Avatar from '../components/Avatar'
+import CropAvatarDialog from '../components/CropAvatarDialog'
 import {
   CalendarIcon,
   CheckIcon,
   LockIcon,
-  MailIcon,
   PencilIcon,
   TrashIcon,
   UsersIcon,
@@ -41,6 +40,9 @@ export default function Profile() {
   const [picError, setPicError] = useState('')
   const [picNotice, setPicNotice] = useState('')
 
+  const [cropFile, setCropFile] = useState(null)
+  const [cropImageSrc, setCropImageSrc] = useState(null)
+
   const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' })
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNextPassword, setShowNextPassword] = useState(false)
@@ -52,7 +54,7 @@ export default function Profile() {
   const updatePassword = (key) => (value) =>
     setPasswords((current) => ({ ...current, [key]: value }))
 
-  async function handlePicked(event) {
+  function handlePicked(event) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
@@ -69,16 +71,34 @@ export default function Profile() {
       return
     }
 
+    const objectUrl = URL.createObjectURL(file)
+    setCropFile(file)
+    setCropImageSrc(objectUrl)
+  }
+
+  function handleCancelCrop() {
+    if (cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc)
+    }
+    setCropFile(null)
+    setCropImageSrc(null)
+  }
+
+  async function handleSaveCroppedPic(croppedFile) {
     setPicBusy(true)
+    setPicError('')
+    setPicNotice('')
     try {
-      refreshUser(await api.uploadProfilePicture(file))
+      refreshUser(await api.uploadProfilePicture(croppedFile))
       setPicNotice('Profile picture updated successfully.')
+      handleCancelCrop()
     } catch (err) {
       setPicError(err.message)
     } finally {
       setPicBusy(false)
     }
   }
+
 
   async function handleRemovePic() {
     setPicError('')
@@ -415,6 +435,18 @@ export default function Profile() {
           </div>
         </main>
       </div>
+
+      {/* Crop Profile Picture Dialog Modal */}
+      {cropImageSrc && (
+        <CropAvatarDialog
+          imageSrc={cropImageSrc}
+          originalFile={cropFile}
+          onCancel={handleCancelCrop}
+          onSave={handleSaveCroppedPic}
+          saving={picBusy}
+        />
+      )}
     </div>
   )
 }
+
