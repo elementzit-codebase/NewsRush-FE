@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import Avatar from '../components/Avatar'
 import RejectUserDialog from '../components/RejectUserDialog'
 import Toast from '../components/Toast'
 import { CheckIcon } from '../components/Icons'
 import * as api from '../lib/api'
+import { useAuth } from '../lib/auth'
 
 // Matches the `approval_status` values the backend accepts on GET /api/users.
 const FILTERS = [
@@ -23,6 +25,7 @@ const formatDate = (value) =>
  * `is_approved = false`, and they cannot log in until approved here.
  */
 export default function Users() {
+  const { user } = useAuth()
   const [filter, setFilter] = useState('pending')
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -99,11 +102,30 @@ export default function Users() {
     <div className="flex min-h-screen bg-white">
       <Sidebar />
 
-      <main className="min-w-0 flex-1 px-8 py-10 lg:px-12">
-        <h1 className="text-[clamp(28px,3vw,40px)] font-bold text-navy-900">Users</h1>
-        <p className="mt-2 text-[17px] text-muted">
-          Approve new registrations so they can sign in.
-        </p>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-[76px] items-center justify-end border-b border-line px-8 lg:px-12">
+          <Link
+            to="/profile"
+            className="flex items-center gap-3 rounded-2xl px-3 py-1.5 transition hover:bg-slate-50"
+            title="Your profile"
+          >
+            <Avatar user={user} className="size-10 text-[15px]" />
+            <span className="hidden text-right sm:block">
+              <span className="block text-[14px] font-semibold text-ink leading-tight">
+                {user?.first_name} {user?.last_name}
+              </span>
+              <span className="block text-[12px] font-medium text-muted mt-0.5">
+                {user?.is_system_user ? 'System user' : 'Editor'}
+              </span>
+            </span>
+          </Link>
+        </header>
+
+        <main className="min-w-0 flex-1 px-8 py-8 lg:px-12">
+          <h1 className="text-[clamp(28px,3vw,40px)] font-bold text-navy-900">Users</h1>
+          <p className="mt-2 text-[17px] text-muted">
+            Approve new registrations so they can sign in.
+          </p>
 
         <div className="mt-8 flex flex-wrap gap-3" role="group" aria-label="Filter users">
           {FILTERS.map(({ key, label }) => (
@@ -197,7 +219,8 @@ export default function Users() {
             ))}
           </ul>
         )}
-      </main>
+        </main>
+      </div>
 
       {rejectingUser && (
         <RejectUserDialog

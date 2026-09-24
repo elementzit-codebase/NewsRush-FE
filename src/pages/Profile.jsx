@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import Avatar from '../components/Avatar'
 import CropAvatarDialog from '../components/CropAvatarDialog'
@@ -150,12 +151,12 @@ export default function Profile() {
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top Navbar Header */}
-        <header className="flex h-[76px] items-center justify-between border-b border-line px-8 lg:px-12">
-          <div>
-            <h1 className="text-[18px] font-bold text-navy-900">Account Settings</h1>
-          </div>
-          <div className="flex items-center gap-3">
+        <header className="flex h-[76px] items-center justify-end border-b border-line px-8 lg:px-12">
+          <Link
+            to="/profile"
+            className="flex items-center gap-3 rounded-2xl px-3 py-1.5 transition hover:bg-slate-50"
+            title="Your profile"
+          >
             <Avatar user={user} className="size-10 text-[15px]" />
             <span className="hidden text-right sm:block">
               <span className="block text-[14px] font-semibold text-ink leading-tight">
@@ -165,11 +166,13 @@ export default function Profile() {
                 {user?.is_system_user ? 'System user' : 'Editor'}
               </span>
             </span>
-          </div>
+          </Link>
         </header>
 
         <main className="min-w-0 flex-1 px-8 py-8 lg:px-12">
-          <div className="mx-auto max-w-5xl space-y-8">
+          <div className="space-y-8">
+            <h1 className="text-[clamp(28px,3vw,40px)] font-bold text-navy-900">Account Settings</h1>
+
             {/* Header Hero Banner */}
             <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-navy-50/70 via-white to-brand-50/40 p-6 sm:p-8 shadow-xs">
               <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
@@ -424,7 +427,7 @@ export default function Profile() {
                     <button
                       type="submit"
                       disabled={passwordBusy}
-                      className="w-full rounded-xl bg-brand-500 py-3.5 text-[15px] font-semibold text-white shadow-sm transition hover:bg-brand-600 disabled:opacity-60"
+                      className="w-fit rounded-xl bg-brand-500 px-8 py-3 text-[15px] font-semibold text-white shadow-sm transition hover:bg-brand-600 disabled:opacity-60"
                     >
                       {passwordBusy ? 'Updating Password…' : 'Update Password'}
                     </button>
