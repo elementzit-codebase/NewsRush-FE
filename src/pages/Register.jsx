@@ -25,9 +25,35 @@ export default function Register() {
 
   const update = (key) => (value) => setForm((current) => ({ ...current, [key]: value }))
 
+  function handlePhoneChange(value) {
+    // Restrict strictly to max 10 characters (digits and phone symbols)
+    const filtered = value.replace(/[^0-9 ()+-]/g, '').slice(0, 10)
+    update('phone_number')(filtered)
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
     setError('')
+
+    const phone = form.phone_number.trim()
+    const phonePattern = /^\+?[0-9 ()-]+$/
+    const digitsOnly = phone.replace(/\D/g, '')
+
+    if (!phone) {
+      setError('Please enter your phone number.')
+      return
+    }
+
+    if (!phonePattern.test(phone) || digitsOnly.length !== 10) {
+      setError('Please enter a valid 10-digit phone number.')
+      return
+    }
+
+    if (form.password.length < 8) {
+      setError('Password must be at least 8 characters long.')
+      return
+    }
+
     setSubmitting(true)
     try {
       setRegistered(await api.register(form))
@@ -93,7 +119,7 @@ export default function Register() {
           icon={MailIcon}
           type="email"
           autoComplete="email"
-          placeholder="firstname.lastname@example.com"
+          placeholder="name@example.com"
           value={form.email}
           onChange={update('email')}
           required
@@ -104,11 +130,12 @@ export default function Register() {
           label="Phone number"
           type="tel"
           autoComplete="tel"
-          placeholder="+91 98765 43210"
+          placeholder="Enter Phone Number"
           value={form.phone_number}
-          onChange={update('phone_number')}
+          onChange={handlePhoneChange}
+          maxLength={10}
           required
-          hint="Digits, spaces, brackets and dashes only."
+          hint="10-digit phone number."
         />
 
         <Field
