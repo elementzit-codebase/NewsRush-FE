@@ -203,7 +203,9 @@ export default function CreateTask() {
     setVoiceDraft((prev) => (prev ? prev + ' ' + phrase : phrase))
   }, [])
 
-  const speech = useSpeechRecognition({ onResult: handleSpeechResult })
+  const editionLanguage = edition?.language || 'malayalam'
+  const speechLang = editionLanguage === 'malayalam' ? 'ml-IN' : 'en-US'
+  const speech = useSpeechRecognition({ lang: speechLang, onResult: handleSpeechResult })
 
   // Runs alongside recognition purely to show that audio is arriving.
   const mic = useMicLevel(speech.listening)
@@ -283,6 +285,7 @@ export default function CreateTask() {
       const result = await api.expandContent({
         summary: activeSection.content,
         characterLimit: charLimit,
+        language: editionLanguage,
       })
       editSection(activeKey, {
         content: result.expanded_content,
@@ -339,7 +342,7 @@ export default function CreateTask() {
         // Even sequentially, back-to-back calls return the occasional 502 from
         // the upstream model, so each section gets one retry after a pause.
         const result = await withRetry(() =>
-          api.expandContent({ summary: current.content, characterLimit: limit }),
+          api.expandContent({ summary: current.content, characterLimit: limit, language: editionLanguage }),
         )
         editSection(key, {
           content: result.expanded_content,
@@ -368,7 +371,10 @@ export default function CreateTask() {
     setNotice('')
     setGenerating(true)
     try {
-      const { headline } = await api.generateHeadline({ content: activeSection.content })
+      const { headline } = await api.generateHeadline({
+        content: activeSection.content,
+        language: editionLanguage,
+      })
       editSection(activeKey, { title: headline })
     } catch (err) {
       setNotice(err.message)
@@ -591,10 +597,15 @@ export default function CreateTask() {
           <h1 className="shrink-0 text-[clamp(26px,2.6vw,36px)] font-bold text-navy-900">
             {edition?.newspaper_name}
           </h1>
-          <p className="shrink-0 mt-2 text-[17px] text-muted">
-            {edition?.edition_label} edition · {edition?.date} · {completedCount}/{TOTAL_SECTIONS}{' '}
-            sections completed
-          </p>
+          <div className="shrink-0 mt-2 flex flex-wrap items-center gap-2 text-[17px] text-muted">
+            <span>
+              {edition?.edition_label} edition · {edition?.date} · {completedCount}/{TOTAL_SECTIONS}{' '}
+              sections completed
+            </span>
+            <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-[12px] font-semibold capitalize text-brand-600 border border-brand-100">
+              {editionLanguage}
+            </span>
+          </div>
 
           {/* Floating Toast Notification for Readiness Check */}
           {validation && (

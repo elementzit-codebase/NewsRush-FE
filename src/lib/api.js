@@ -290,15 +290,18 @@ export const saveSection = (editionId, section) =>
  * POST /api/ai/expand — grows a summary into a column-fitting article.
  * @returns {Promise<{expanded_content: string, generated_title: string}>}
  */
-export const expandContent = ({ summary, characterLimit }) =>
+export const expandContent = ({ summary, characterLimit, language }) =>
   request('/api/ai/expand', {
     method: 'POST',
-    body: { summary, character_limit: characterLimit },
+    body: { summary, character_limit: characterLimit, ...(language ? { language } : {}) },
   })
 
 /**
  * POST /api/ai/headline — writes a headline for an existing body.
  * @returns {Promise<{headline: string}>}
  */
-export const generateHeadline = ({ content }) =>
-  request('/api/ai/headline', { method: 'POST', body: { content } })
+export const generateHeadline = ({ content, language }) =>
+  request('/api/ai/headline', {
+    method: 'POST',
+    body: { content, ...(language ? { language } : {}) },
+  })

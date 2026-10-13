@@ -38,7 +38,14 @@ export default function EditionCard({ edition, completed = 0, layout = 'grid', o
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
-            <span className="text-sm font-medium text-brand-500">{edition.edition_label}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-brand-500">{edition.edition_label}</span>
+              {edition.language && (
+                <span className="rounded-md bg-canvas px-2 py-0.5 text-[11px] font-semibold capitalize text-muted border border-line">
+                  {edition.language}
+                </span>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => onDelete?.(edition)}

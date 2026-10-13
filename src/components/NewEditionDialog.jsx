@@ -13,6 +13,7 @@ const NEWSPAPER_NAME = 'NewsRush Daily'
 export default function NewEditionDialog({ onCancel, onCreate }) {
   const [date, setDate] = useState(today)
   const [editionLabel, setEditionLabel] = useState('Evening')
+  const [language, setLanguage] = useState('malayalam')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -31,6 +32,7 @@ export default function NewEditionDialog({ onCancel, onCreate }) {
         newspaper_name: NEWSPAPER_NAME,
         date,
         edition_label: editionLabel.trim(),
+        language,
       })
     } catch (err) {
       setError(err.message)
@@ -79,6 +81,34 @@ export default function NewEditionDialog({ onCancel, onCreate }) {
             className="mt-1.5 w-full rounded-xl border border-line px-4 py-3 text-[15px] outline-none focus:border-brand-500"
           />
         </label>
+
+        <div className="mt-4">
+          <label className="block text-[14px] font-medium text-ink">Language</label>
+          <div className="mt-1.5 grid grid-cols-2 gap-2 rounded-xl bg-canvas p-1.5 border border-line">
+            <button
+              type="button"
+              onClick={() => setLanguage('malayalam')}
+              className={`rounded-lg py-2.5 text-[14px] font-medium transition ${
+                language === 'malayalam'
+                  ? 'bg-white text-brand-600 shadow-sm border border-line/60 font-semibold'
+                  : 'text-muted hover:text-ink'
+              }`}
+            >
+              Malayalam
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguage('english')}
+              className={`rounded-lg py-2.5 text-[14px] font-medium transition ${
+                language === 'english'
+                  ? 'bg-white text-brand-600 shadow-sm border border-line/60 font-semibold'
+                  : 'text-muted hover:text-ink'
+              }`}
+            >
+              English
+            </button>
+          </div>
+        </div>
 
         {error && (
           <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-[13px] text-red-700">
