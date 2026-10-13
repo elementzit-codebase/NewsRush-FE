@@ -137,6 +137,34 @@ body {
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
+/* -------------------------------------------------- Malayalam newspaper styling */
+.edition-malayalam {
+  font-family: "Anek Malayalam", "Gayathri", "Manjari", sans-serif;
+}
+
+.edition-malayalam [data-copyfit] {
+  font-family: "Anek Malayalam", sans-serif;
+  text-align: justify;
+  text-justify: inter-word;
+  word-break: normal;
+  overflow-wrap: break-word;
+  line-break: loose;
+  hyphens: none;
+  word-spacing: 0;
+  letter-spacing: normal;
+  font-feature-settings: "kern" 1, "liga" 1;
+  text-rendering: optimizeLegibility;
+}
+
+.edition-malayalam h1,
+.edition-malayalam h2 {
+  font-family: "Noto Serif Malayalam", "Anek Malayalam", serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
 @keyframes toast-shrink {
   from { width: 100%; }
   to { width: 0%; }

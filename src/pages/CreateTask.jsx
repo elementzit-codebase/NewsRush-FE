@@ -779,6 +779,7 @@ export default function CreateTask() {
                 masthead={edition?.newspaper_name}
                 editionDate={edition?.date}
                 editionLabel={edition?.edition_label}
+                language={editionLanguage}
               />
             </div>
 

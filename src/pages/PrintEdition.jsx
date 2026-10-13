@@ -6,6 +6,7 @@ import { COLUMNS, GRID_GAP, SHEET, SHEET_PADDING } from '../data/printGeometry'
 import { printCapacityFor } from '../lib/capacity'
 import { buildPages } from '../data/templates'
 import { readTemplates } from '../lib/templateStore'
+import { formatMalayalamNewspaperText, isMalayalamEdition } from '../lib/malayalamTypography'
 import * as api from '../lib/api'
 
 /**
@@ -27,12 +28,21 @@ const BODY_PT_MAX = 11
 const BODY_PT_FLOOR = 7
 const BODY_PT_STEP = 0.25
 
+// Malayalam characters and ligatures occupy slightly more visual width, so a slightly
+// larger base point and tighter leading prevents awkward word justification gaps.
+const MALAYALAM_BODY_PT_BASE = 8.8
+const MALAYALAM_BODY_PT_MAX = 9.8
+const MALAYALAM_BODY_PT_FLOOR = 7.8
+
 // Leading is opened per section to close the gap the shared size cannot, since
 // it cannot rise past the fullest section. The base matches the capacity maths;
 // the ceiling keeps a sparse column from reading as airy.
 const BODY_LEADING_BASE = 1.35
 const BODY_LEADING_MAX = 1.9
 const BODY_LEADING_STEP = 0.05
+
+const MALAYALAM_LEADING_BASE = 1.40
+const MALAYALAM_LEADING_MAX = 1.50
 
 const formatLongDate = (iso) => {
   const date = iso ? new Date(`${iso}T00:00:00`) : new Date()
@@ -368,10 +378,13 @@ function Masthead({ name }) {
 
 function Sheet({ page, totalPages, edition, sections }) {
   const isFront = page.page_number === 1
+  const isMalayalam = isMalayalamEdition(edition)
 
   return (
     <article
-      className="print-sheet bg-white text-black shadow-[0_10px_40px_-24px_rgba(15,32,68,0.5)] print:shadow-none"
+      className={`print-sheet bg-white text-black shadow-[0_10px_40px_-24px_rgba(15,32,68,0.5)] print:shadow-none ${
+        isMalayalam ? 'edition-malayalam' : ''
+      }`}
       style={{
         width: SHEET.width + 'mm',
         height: SHEET.height + 'mm',
@@ -424,14 +437,14 @@ function Sheet({ page, totalPages, edition, sections }) {
                 <p className="text-[7.5pt] font-bold tracking-[0.12em] uppercase">
                   {section?.section_name?.trim() || block.section_name}
                 </p>
-                <h2
-                  className={`mt-1 font-serif leading-[1.1] ${
-                    block.span === 3 ? 'text-[22pt]' : block.span === 2 ? 'text-[16pt]' : 'text-[13pt]'
-                  }`}
-                >
-                  {section?.title}
+                <h2 className="mt-1 font-serif text-[20pt] leading-[1.1]">
+                  {isMalayalam ? formatMalayalamNewspaperText(section?.title) : section?.title}
                 </h2>
-                <BodyColumns columns={COLUMNS[block.span]} text={section?.content ?? ''} />
+                <BodyColumns
+                  columns={COLUMNS[block.span]}
+                  text={section?.content ?? ''}
+                  isMalayalam={isMalayalam}
+                />
               </section>
             )
           }),
@@ -465,10 +478,17 @@ function Sheet({ page, totalPages, edition, sections }) {
  * copy fits. One block in slightly smaller type is a far smaller price than a
  * whole paper of undersized text.
  */
-function useCopyfit(containerRef, dependency) {
+function useCopyfit(containerRef, edition) {
   useLayoutEffect(() => {
     const root = containerRef.current
     if (!root) return undefined
+
+    const isMalayalam = isMalayalamEdition(edition)
+    const ptBase = isMalayalam ? MALAYALAM_BODY_PT_BASE : BODY_PT_BASE
+    const ptMax = isMalayalam ? MALAYALAM_BODY_PT_MAX : BODY_PT_MAX
+    const ptFloor = isMalayalam ? MALAYALAM_BODY_PT_FLOOR : BODY_PT_FLOOR
+    const leadingBase = isMalayalam ? MALAYALAM_LEADING_BASE : BODY_LEADING_BASE
+    const leadingMax = isMalayalam ? MALAYALAM_LEADING_MAX : BODY_LEADING_MAX
 
     const bodies = () => Array.from(root.querySelectorAll('[data-copyfit]'))
 
@@ -486,79 +506,98 @@ function useCopyfit(containerRef, dependency) {
       const all = bodies()
       if (!all.length) return
 
-      // Drop any per-section override from a previous pass, so every section is
-      // reconsidered from the shared size.
+      // Drop any per-section font size overrides so EVERY section strictly shares the same font size
       all.forEach((el) => {
         el.style.fontSize = ''
       })
-      apply(BODY_PT_BASE)
 
-      // Sections that cannot fit even at the base size are handled on their own.
-      const overfull = all.filter(overflowing)
-      const shared = all.filter((el) => !overfull.includes(el))
+      // Strictly uniform font size across all blocks in the entire edition.
+      // No section is ever set to a different font size than another section.
+      let size = ptBase
+      apply(size)
 
-      // Grow the shared size until the first *fittable* section would overflow.
-      let size = BODY_PT_BASE
-      while (size < BODY_PT_MAX) {
-        const next = size + BODY_PT_STEP
-        apply(next)
-        if (shared.some(overflowing)) {
-          apply(size)
-          break
-        }
-        size = next
+      // Find the uniform font size where all blocks fit without overflowing
+      while (size > ptFloor && all.some(overflowing)) {
+        size -= BODY_PT_STEP
+        apply(size)
       }
 
-      // Then bring the over-long sections down until their copy fits, rather
-      // than clipping the end of a sentence.
-      for (const el of overfull) {
-        let own = BODY_PT_BASE
-        el.style.fontSize = `${own}pt`
-        while (own > BODY_PT_FLOOR && overflowing(el)) {
-          own -= BODY_PT_STEP
-          el.style.fontSize = `${own}pt`
-        }
-      }
+      // Strictly ensure NO section ever has an individual font size override
+      all.forEach((el) => {
+        el.style.fontSize = ''
+      })
 
-      /*
-       * Vertical justification.
-       *
-       * The shared size cannot rise past the fullest section — with one section
-       * at 99% of its box, nothing may grow — so sections holding less copy
-       * would still stop short and leave a band of white. Opening the leading
-       * closes that gap while every section keeps the same type size, which is
-       * how a compositor fills a short column. Capped, because loose enough
-       * leading reads as airy rather than set.
-       */
-      for (const el of shared) {
-        let leading = BODY_LEADING_BASE
-        el.style.lineHeight = String(leading)
-        while (leading < BODY_LEADING_MAX) {
-          const next = +(leading + BODY_LEADING_STEP).toFixed(2)
-          el.style.lineHeight = String(next)
-          if (overflowing(el)) {
-            el.style.lineHeight = String(leading)
-            break
+      if (isMalayalam) {
+        // Uniform tight leading for Malayalam
+        all.forEach((el) => {
+          el.style.lineHeight = String(leadingBase)
+        })
+      } else {
+        // Vertical justification via leading for English (closes white space without changing font size)
+        for (const el of all) {
+          let leading = leadingBase
+          el.style.lineHeight = String(leading)
+          while (leading < leadingMax) {
+            const next = +(leading + BODY_LEADING_STEP).toFixed(2)
+            el.style.lineHeight = String(next)
+            if (overflowing(el)) {
+              el.style.lineHeight = String(leading)
+              break
+            }
+            leading = next
           }
-          leading = next
         }
       }
     }
 
     fit()
 
+    if (isMalayalam && typeof document !== 'undefined' && document.fonts) {
+      document.fonts.ready.then(fit)
+    }
+
     // Column widths change when the preview is scaled or the window resized.
     const observer = new ResizeObserver(fit)
     observer.observe(root)
     return () => observer.disconnect()
-  }, [containerRef, dependency])
+  }, [containerRef, edition])
 }
 
 /**
  * Body copy in newspaper columns. The point size is deliberately not set here:
  * every section inherits the one edition-wide size fitted by `useCopyfit`.
  */
-function BodyColumns({ columns, text }) {
+function BodyColumns({ columns, text, isMalayalam }) {
+  const formattedText = useMemo(() => {
+    if (!isMalayalam || !text) return text
+    return formatMalayalamNewspaperText(text)
+  }, [text, isMalayalam])
+
+  if (isMalayalam) {
+    return (
+      <div
+        data-copyfit
+        className="mt-1.5 min-h-0 flex-1 overflow-hidden"
+        style={{
+          fontSize: 'var(--body-pt)',
+          lineHeight: MALAYALAM_LEADING_BASE,
+          columnCount: columns,
+          columnGap: GRID_GAP + 'mm',
+          columnRule: '0.4pt solid rgba(0,0,0,0.25)',
+          textAlign: 'justify',
+          textJustify: 'inter-word',
+          wordBreak: 'normal',
+          overflowWrap: 'break-word',
+          lineBreak: 'loose',
+          hyphens: 'none',
+        }}
+      >
+        {formattedText}
+      </div>
+    )
+  }
+
+  // Exact original English implementation
   return (
     <div
       data-copyfit

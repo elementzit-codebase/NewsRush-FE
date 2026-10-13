@@ -46,9 +46,16 @@ function NewspaperCanvas({
   masthead = 'DAILY NEWS',
   editionDate,
   editionLabel,
+  language = 'english',
 }) {
+  const isMalayalam = (language || 'english').toLowerCase() === 'malayalam'
+
   return (
-    <div className="w-full max-w-full overflow-hidden rounded-2xl border border-line bg-white p-4 sm:p-6 shadow-[0_10px_40px_-30px_rgba(15,32,68,0.5)]">
+    <div
+      className={`w-full max-w-full overflow-hidden rounded-2xl border border-line bg-white p-4 sm:p-6 shadow-[0_10px_40px_-30px_rgba(15,32,68,0.5)] ${
+        isMalayalam ? 'edition-malayalam' : ''
+      }`}
+    >
       <header>
         <div className="flex items-start justify-between gap-4 text-[13px] text-slate-500">
           <span className="border-b border-slate-300 pb-1">{formatEditionDate(editionDate)}</span>
