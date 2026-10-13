@@ -832,7 +832,7 @@ export default function CreateTask() {
                   placeholder="Type section body, or record voice below..."
                   rows={8}
                   aria-label={'Body text for ' + activeName}
-                  className="scroll-thin h-[200px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
+                  className="scroll-subtle h-[200px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
                 />
 
                 {/* --- 1. ACTIVE RECORDING STATE --- */}

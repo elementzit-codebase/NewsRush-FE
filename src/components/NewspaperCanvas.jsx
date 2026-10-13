@@ -157,7 +157,7 @@ function Block({ block, section, active, onSelect }) {
             ref={bodyRef}
             className={[
               BODY_CLASS,
-              'scroll-thin w-full overflow-y-auto whitespace-pre-wrap',
+              'scroll-subtle w-full overflow-y-auto whitespace-pre-wrap',
               expanded ? '' : (COLLAPSED_BODY[block.size] ?? COLLAPSED_BODY.small),
             ].join(' ')}
           >
