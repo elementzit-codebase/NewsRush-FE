@@ -198,9 +198,29 @@ export default function CreateTask() {
 
   // Stores the recorded transcript for review before applying or discarding.
   const [voiceDraft, setVoiceDraft] = useState('')
+  const lastPhraseRef = useRef('')
 
   const handleSpeechResult = useCallback((phrase) => {
-    setVoiceDraft((prev) => (prev ? prev + ' ' + phrase : phrase))
+    const trimmed = phrase?.trim()
+    if (!trimmed) return
+
+    setVoiceDraft((prev) => {
+      if (!prev) {
+        lastPhraseRef.current = trimmed
+        return trimmed
+      }
+      const prevTrimmed = prev.trim()
+      // Guard against identical phrase duplicates (e.g., from overlapping stop + isFinal events)
+      if (
+        prevTrimmed === trimmed ||
+        prevTrimmed.endsWith(trimmed) ||
+        lastPhraseRef.current === trimmed
+      ) {
+        return prev
+      }
+      lastPhraseRef.current = trimmed
+      return `${prev} ${trimmed}`
+    })
   }, [])
 
   const editionLanguage = edition?.language || 'malayalam'
@@ -213,15 +233,14 @@ export default function CreateTask() {
   function handleStartRecording() {
     if (speech.listening) return
     setVoiceDraft('')
+    lastPhraseRef.current = ''
     setNotice('')
     speech.start()
   }
 
   function handleStopRecording() {
-    if (speech.interim && speech.interim.trim()) {
-      const pending = speech.interim.trim()
-      setVoiceDraft((prev) => (prev ? prev + ' ' + pending : pending))
-    }
+    // Simply stopping lets the native speech recognition engine trigger its final result
+    // without manually double-appending interim text.
     speech.stop()
   }
 
@@ -229,6 +248,7 @@ export default function CreateTask() {
     if (speech.listening) {
       speech.stop()
     }
+    lastPhraseRef.current = ''
     setVoiceDraft('')
   }
 

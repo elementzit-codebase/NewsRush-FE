@@ -49,7 +49,10 @@ export function useSpeechRecognition({ lang = 'en-US', onResult } = {}) {
         for (let i = event.resultIndex; i < event.results.length; i += 1) {
           const result = event.results[i]
           if (result.isFinal) {
-            onResultRef.current?.(result[0].transcript.trim())
+            const transcript = result[0].transcript.trim()
+            if (transcript) {
+              onResultRef.current?.(transcript)
+            }
           } else {
             pending += result[0].transcript
           }
