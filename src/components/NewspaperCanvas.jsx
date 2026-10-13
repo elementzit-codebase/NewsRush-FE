@@ -20,8 +20,8 @@ const COLLAPSED_BODY = {
 }
 
 const LABEL_CLASS = 'mb-2 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide uppercase'
-const TITLE_CLASS = 'font-serif text-[18px] leading-tight text-slate-800'
-const BODY_CLASS = 'mt-1.5 text-[13px] leading-relaxed text-slate-600'
+const TITLE_CLASS = 'font-serif text-[18px] leading-tight text-slate-800 break-words [overflow-wrap:anywhere]'
+const BODY_CLASS = 'mt-1.5 text-[13px] leading-relaxed text-slate-600 break-words [overflow-wrap:anywhere]'
 
 const formatEditionDate = (iso) => {
   const date = iso ? new Date(`${iso}T00:00:00`) : new Date()
@@ -66,7 +66,7 @@ function NewspaperCanvas({
         </div>
       </header>
 
-      <div className="mt-5 grid auto-rows-min grid-cols-3 gap-4">
+      <div className="mt-5 grid auto-rows-min grid-cols-[repeat(3,minmax(0,1fr))] gap-4">
         {page.blocks.map((block) => (
           <Block
             key={block.section_key}
@@ -134,7 +134,7 @@ function Block({ block, section, active, onSelect }) {
       }}
       style={{ gridColumn: `span ${block.span} / span ${block.span}` }}
       className={[
-        'flex cursor-pointer flex-col rounded-xl border border-dashed p-5 transition',
+        'flex min-w-0 w-full cursor-pointer flex-col rounded-xl border border-dashed p-5 transition',
         MIN_HEIGHT[block.size] ?? MIN_HEIGHT.small,
         filled ? 'items-start justify-start text-left' : 'items-center justify-center text-center',
         active
