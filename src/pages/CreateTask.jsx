@@ -757,7 +757,7 @@ export default function CreateTask() {
             ))}
           </div>
 
-          <div className="mt-7 grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="mt-7 grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
             {/* The only scrolling region: the page picker, the header and the
                 section editor stay put while the sheet scrolls past them. */}
             <div className="scroll-thin min-h-0 overflow-y-auto pr-1">

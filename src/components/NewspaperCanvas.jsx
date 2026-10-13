@@ -20,8 +20,8 @@ const COLLAPSED_BODY = {
 }
 
 const LABEL_CLASS = 'mb-2 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide uppercase'
-const TITLE_CLASS = 'font-serif text-[18px] leading-tight text-slate-800 break-words [overflow-wrap:anywhere]'
-const BODY_CLASS = 'mt-1.5 text-[13px] leading-relaxed text-slate-600 break-words [overflow-wrap:anywhere]'
+const TITLE_CLASS = 'block w-full min-w-0 font-serif text-[18px] leading-tight text-slate-800 break-words [word-break:break-word] [overflow-wrap:anywhere]'
+const BODY_CLASS = 'mt-1.5 block w-full min-w-0 text-[13px] leading-relaxed text-slate-600 break-words [word-break:break-word] [overflow-wrap:anywhere]'
 
 const formatEditionDate = (iso) => {
   const date = iso ? new Date(`${iso}T00:00:00`) : new Date()
@@ -48,7 +48,7 @@ function NewspaperCanvas({
   editionLabel,
 }) {
   return (
-    <div className="rounded-2xl border border-line bg-white p-7 shadow-[0_10px_40px_-30px_rgba(15,32,68,0.5)]">
+    <div className="w-full max-w-full overflow-hidden rounded-2xl border border-line bg-white p-5 sm:p-7 shadow-[0_10px_40px_-30px_rgba(15,32,68,0.5)]">
       <header>
         <div className="flex items-start justify-between gap-4 text-[13px] text-slate-500">
           <span className="border-b border-slate-300 pb-1">{formatEditionDate(editionDate)}</span>
@@ -66,7 +66,7 @@ function NewspaperCanvas({
         </div>
       </header>
 
-      <div className="mt-5 grid auto-rows-min grid-cols-[repeat(3,minmax(0,1fr))] gap-4">
+      <div className="mt-5 grid w-full auto-rows-min grid-cols-[repeat(3,minmax(0,1fr))] gap-3 sm:gap-4">
         {page.blocks.map((block) => (
           <Block
             key={block.section_key}
@@ -134,7 +134,7 @@ function Block({ block, section, active, onSelect }) {
       }}
       style={{ gridColumn: `span ${block.span} / span ${block.span}` }}
       className={[
-        'flex min-w-0 w-full cursor-pointer flex-col rounded-xl border border-dashed p-5 transition',
+        'flex min-w-0 w-full max-w-full overflow-hidden cursor-pointer flex-col rounded-xl border border-dashed p-3.5 sm:p-4.5 transition',
         MIN_HEIGHT[block.size] ?? MIN_HEIGHT.small,
         filled ? 'items-start justify-start text-left' : 'items-center justify-center text-center',
         active
