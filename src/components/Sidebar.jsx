@@ -69,12 +69,12 @@ export default function Sidebar({ variant = 'default' }) {
         onClick={toggleCollapsed}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        className="absolute -right-3.5 top-6 z-30 flex size-7 items-center justify-center rounded-full border border-line bg-white text-muted shadow-sm transition hover:border-brand-500 hover:bg-brand-50 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+        className="absolute -right-3 top-[22px] z-30 flex size-6.5 items-center justify-center rounded-full border border-line bg-white text-muted shadow-sm transition hover:border-brand-500 hover:bg-brand-50 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
       >
         {collapsed ? (
-          <ChevronRightIcon className="size-4" />
+          <ChevronRightIcon className="size-3.5" />
         ) : (
-          <ChevronLeftIcon className="size-4" />
+          <ChevronLeftIcon className="size-3.5" />
         )}
       </button>
 

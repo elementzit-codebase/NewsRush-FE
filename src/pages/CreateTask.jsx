@@ -476,13 +476,15 @@ export default function CreateTask() {
       <Sidebar variant="panel" />
 
       {/* Page picker */}
-      <aside className="hidden w-[270px] 2xl:w-[280px] shrink-0 flex-col border-r border-line bg-canvas px-2 py-6 xl:flex">
-        <h2 className="text-[20px] font-bold text-navy-900">Pages &amp; Templates</h2>
-        <p className="mt-0.5 text-[14px] text-muted">
-          {completedCount} of {TOTAL_SECTIONS} sections completed.
-        </p>
+      <aside className="hidden w-[275px] shrink-0 flex-col border-r border-line bg-canvas px-3.5 py-5 xl:flex">
+        <div className="pl-3.5 pr-1">
+          <h2 className="text-[19px] font-bold text-navy-900 leading-tight">Pages &amp; Templates</h2>
+          <p className="mt-1 text-[13px] text-muted">
+            {completedCount} of {TOTAL_SECTIONS} sections completed.
+          </p>
+        </div>
 
-        <ul className="scroll-thin mt-4 flex-1 space-y-2.5 overflow-y-auto pr-1">
+        <ul className="scroll-subtle mt-4 flex-1 space-y-2 overflow-y-auto pr-1">
           {pages.map((item, index) => {
             const selected = index === pageIndex
             const done = item.blocks.filter((b) => completedKeys.has(b.section_key)).length
@@ -491,45 +493,53 @@ export default function CreateTask() {
               <li
                 key={item.page_number}
                 className={[
-                  'rounded-2xl border bg-white transition',
-                  selected ? 'border-brand-500 ring-2 ring-brand-100' : 'border-line',
+                  'rounded-xl border bg-white transition shadow-2xs',
+                  selected ? 'border-brand-500 ring-2 ring-brand-100' : 'border-line hover:border-slate-300',
                 ].join(' ')}
               >
                 <button
                   type="button"
                   onClick={() => selectPage(index)}
                   aria-pressed={selected}
-                  className="flex w-full items-start gap-3.5 p-3.5 text-left"
+                  className="flex w-full items-center gap-3 p-3 text-left"
                 >
                   <TemplateThumb
                     blocks={item.blocks}
                     completedKeys={completedKeys}
-                    className="w-[62px] shrink-0"
+                    className="w-[46px] shrink-0"
                   />
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-semibold text-ink">
-                      Page {item.page_number} — {item.name}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="truncate text-[14px] font-bold text-navy-900">
+                        Page {item.page_number}
+                      </span>
+                      {done === item.blocks.length ? (
+                        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-emerald-500 text-white shadow-2xs">
+                          <CheckIcon className="size-3" />
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-semibold text-muted">
+                          {done}/{item.blocks.length}
+                        </span>
+                      )}
+                    </div>
+                    <span className="block truncate text-[12px] font-medium text-slate-600">
+                      {item.name}
                     </span>
-                    <span className="mt-1 block text-[13px] text-muted">{item.templateName}</span>
-                    <span className="mt-0.5 block text-[13px] leading-relaxed text-muted">
-                      {done} of {item.blocks.length} sections done
+                    <span className="mt-0.5 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                      {item.templateName}
                     </span>
-                  </span>
-                  {done === item.blocks.length && (
-                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-500 text-white">
-                      <CheckIcon className="size-4" />
-                    </span>
-                  )}
+                  </div>
                 </button>
 
                 {/* Templates rearrange the sections a page already owns, so
                     switching never changes what has been written. */}
                 {selected && (
-                  <div className="border-t border-line px-3.5 py-3">
-                    <p className="text-[12px] font-semibold tracking-wide text-muted uppercase">
+                  <div className="border-t border-line/80 bg-slate-50/50 p-2.5 rounded-b-xl">
+                    <p className="px-0.5 text-[11px] font-semibold tracking-wider text-muted uppercase">
                       Change template
                     </p>
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-1.5 grid grid-cols-3 gap-1.5">
                       {variants.map((variant) => {
                         const current = variant.key === item.templateKey
                         return (
@@ -540,21 +550,21 @@ export default function CreateTask() {
                             aria-pressed={current}
                             title={variant.description}
                             className={[
-                              'flex-1 rounded-xl border p-2 text-left transition',
+                              'flex flex-col items-center rounded-lg border p-1.5 text-center transition',
                               current
-                                ? 'border-brand-500 bg-brand-50/60'
-                                : 'border-line hover:border-brand-100',
+                                ? 'border-brand-500 bg-white shadow-2xs'
+                                : 'border-line bg-white/70 hover:border-brand-200 hover:bg-white',
                             ].join(' ')}
                           >
                             <TemplateThumb
                               blocks={buildPage(item.page_number, variant.key).blocks}
                               completedKeys={completedKeys}
-                              className="w-full"
+                              className="w-full max-w-[42px]"
                             />
                             <span
                               className={[
-                                'mt-1.5 block text-[12px] font-medium',
-                                current ? 'text-brand-600' : 'text-muted',
+                                'mt-1 block truncate text-[11px] font-medium',
+                                current ? 'font-semibold text-brand-600' : 'text-slate-600',
                               ].join(' ')}
                             >
                               {variant.name}
