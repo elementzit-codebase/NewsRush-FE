@@ -476,13 +476,13 @@ export default function CreateTask() {
       <Sidebar variant="panel" />
 
       {/* Page picker */}
-      <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-canvas px-5 py-8 xl:flex">
-        <h2 className="text-[22px] font-bold text-navy-900">Pages &amp; Templates</h2>
-        <p className="mt-1 text-[15px] text-muted">
+      <aside className="hidden w-[270px] 2xl:w-[280px] shrink-0 flex-col border-r border-line bg-canvas px-2 py-6 xl:flex">
+        <h2 className="text-[20px] font-bold text-navy-900">Pages &amp; Templates</h2>
+        <p className="mt-0.5 text-[14px] text-muted">
           {completedCount} of {TOTAL_SECTIONS} sections completed.
         </p>
 
-        <ul className="scroll-thin mt-6 flex-1 space-y-3 overflow-y-auto pr-1">
+        <ul className="scroll-thin mt-4 flex-1 space-y-2.5 overflow-y-auto pr-1">
           {pages.map((item, index) => {
             const selected = index === pageIndex
             const done = item.blocks.filter((b) => completedKeys.has(b.section_key)).length
@@ -573,8 +573,8 @@ export default function CreateTask() {
 
       {/* Main column */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex flex-wrap items-center justify-between gap-4 px-8 py-6">
-          <nav aria-label="Breadcrumb" className="text-[15px] text-muted">
+        <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 lg:px-6">
+          <nav aria-label="Breadcrumb" className="text-[14px] text-muted">
             <Link to="/" className="hover:text-ink">
               Workspace
             </Link>
@@ -584,7 +584,7 @@ export default function CreateTask() {
             <span className="text-ink">Page {page.page_number}</span>
           </nav>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <SaveIndicator state={saveState} />
 
             {/* Existing copy was written against the old undersized limits, so
@@ -593,9 +593,9 @@ export default function CreateTask() {
               <button
                 type="button"
                 onClick={handleFillAll}
-                className="inline-flex items-center gap-2 rounded-xl border border-brand-500 px-5 py-3.5 text-[15px] font-semibold text-brand-600 transition hover:bg-brand-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-brand-500 px-4 py-2.5 text-[14px] font-semibold text-brand-600 transition hover:bg-brand-50"
               >
-                <SparkleIcon className="size-5" />
+                <SparkleIcon className="size-4.5" />
                 {fill.running
                   ? `Filling ${fill.done + 1} of ${fill.total} — click to stop`
                   : `Fill ${underFilled.length} thin section${underFilled.length === 1 ? '' : 's'}`}
@@ -605,15 +605,15 @@ export default function CreateTask() {
             <button
               type="button"
               onClick={() => refreshValidation(true)}
-              className="inline-flex items-center gap-3 rounded-xl bg-navy-900 px-6 py-3.5 text-[16px] font-semibold text-white transition hover:bg-navy-700"
+              className="inline-flex items-center gap-2.5 rounded-xl bg-navy-900 px-5 py-2.5 text-[15px] font-semibold text-white transition hover:bg-navy-700"
             >
               Check readiness
-              <ArrowRightIcon className="size-5" />
+              <ArrowRightIcon className="size-4.5" />
             </button>
           </div>
         </header>
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-8 pb-6">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-5 pb-5 lg:px-6">
           <h1 className="shrink-0 text-[clamp(26px,2.6vw,36px)] font-bold text-navy-900">
             {edition?.newspaper_name}
           </h1>
@@ -757,7 +757,7 @@ export default function CreateTask() {
             ))}
           </div>
 
-          <div className="mt-7 grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="mt-4 grid min-h-0 flex-1 gap-4 lg:gap-3 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
             {/* The only scrolling region: the page picker, the header and the
                 section editor stay put while the sheet scrolls past them. */}
             <div className="scroll-thin min-h-0 overflow-y-auto pr-1">
@@ -773,7 +773,7 @@ export default function CreateTask() {
             </div>
 
             {/* Section editor */}
-            <section className="scroll-thin min-h-0 overflow-y-auto rounded-2xl border border-line bg-brand-50/40 p-6">
+            <section className="scroll-thin min-h-0 overflow-y-auto rounded-2xl border border-line bg-brand-50/40 p-4.5 sm:p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">

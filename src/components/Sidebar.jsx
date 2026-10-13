@@ -59,7 +59,7 @@ export default function Sidebar({ variant = 'default' }) {
       aria-label="Sidebar navigation"
       className={[
         'sticky top-0 h-screen max-h-screen z-40 flex shrink-0 flex-col border-r border-line bg-white select-none transition-all duration-300 ease-in-out',
-        collapsed ? 'w-[90px]' : 'w-56',
+        collapsed ? 'w-[76px]' : 'w-47',
         variant === 'panel' ? 'bg-white' : 'bg-white',
       ].join(' ')}
     >
