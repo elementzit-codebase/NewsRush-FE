@@ -36,11 +36,13 @@ export const COLUMNS = { 1: 2, 2: 3, 3: 5 }
 export const TYPE = {
   bodyPt: 8.5,
   bodyLeading: 1.35,
+  malayalamBodyPt: 8.8,
+  malayalamBodyLeading: 1.4,
   labelHeight: 3.5,
-  headlinePt: { 1: 22, 2: 22, 3: 22 },
-  // Headlines wrap to extra lines often enough that reserving allowance avoids
-  // pushing body text out of the box.
-  headlineAllowance: { 1: 14, 2: 13, 3: 12 },
+  headlinePt: { 1: 13, 2: 16, 3: 22 },
+  // Headlines wrap to a second line often enough that reserving one line would
+  // push body text out of the box.
+  headlineAllowance: { 1: 10, 2: 10, 3: 12 },
   // Gap between the headline and the body columns.
   headlineGap: 2,
 }

@@ -147,6 +147,13 @@ export const RefreshCwIcon = (p) => (
 export const StopIcon = (p) => (
   <Svg {...p}><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" /></Svg>
 )
+export const PhotoIcon = (p) => (
+  <Svg {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></Svg>
+)
+export const UploadIcon = (p) => (
+  <Svg {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></Svg>
+)
+
 
 
 

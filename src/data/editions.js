@@ -6,7 +6,7 @@
 export const STATUS_LABELS = {
   draft: 'Draft',
   in_progress: 'In Progress',
-  ready: 'Ready to Print',
+  ready: 'Ready',
   completed: 'Completed',
 }
 

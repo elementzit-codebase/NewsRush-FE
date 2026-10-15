@@ -165,6 +165,25 @@ body {
   overflow-wrap: break-word;
 }
 
+/* -------------------------------------------------- English newspaper styling */
+.edition-english {
+  font-family: var(--font-sans);
+}
+
+.edition-english [data-copyfit] {
+  font-family: var(--font-sans);
+  text-align: justify;
+  hyphens: auto;
+  font-feature-settings: "kern" 1, "liga" 1;
+  text-rendering: optimizeLegibility;
+}
+
+.edition-english h1,
+.edition-english h2 {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+}
+
 @keyframes toast-shrink {
   from { width: 100%; }
   to { width: 0%; }

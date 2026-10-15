@@ -2,11 +2,19 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowRightIcon, CheckIcon } from '../components/Icons'
 import { TOTAL_SECTIONS } from '../data/sections'
-import { COLUMNS, GRID_GAP, SHEET, SHEET_PADDING } from '../data/printGeometry'
-import { printCapacityFor } from '../lib/capacity'
+import { COLUMNS, GRID_GAP, SHEET, SHEET_PADDING, TYPE, rowHeight } from '../data/printGeometry'
+import {
+  effectiveCapacityFor,
+  getLeadStoryLeftRatio,
+  leadStoryLeftCharLimitFor,
+  MIN_FILL_RATIO,
+  sentenceEndOffsets,
+  splitLeadStoryText,
+} from '../lib/capacity'
 import { buildPages } from '../data/templates'
 import { readTemplates } from '../lib/templateStore'
 import { formatMalayalamNewspaperText, isMalayalamEdition } from '../lib/malayalamTypography'
+import { cleanSectionContent, cleanSectionTitle } from '../lib/contentSanitizer'
 import * as api from '../lib/api'
 
 /**
@@ -19,30 +27,77 @@ import * as api from '../lib/api'
  * printing.
  */
 
-// Copyfitting bounds, in points. BASE is the size the capacity maths assumes;
-// the fitter grows towards MAX when there is room, and falls back towards FLOOR
-// when a section has more copy than its box holds — clipping a sentence is
-// worse than setting it slightly small.
-const BODY_PT_BASE = 8.5
-const BODY_PT_MAX = 11
-const BODY_PT_FLOOR = 7
-const BODY_PT_STEP = 0.25
+// Copyfitting bounds, in points. Sizing is strictly uniform across all sections
+// in the edition, matching authentic newspaper typography.
+const EMPTY_PRINT_CONTENTS = {}
 
-// Malayalam characters and ligatures occupy slightly more visual width, so a slightly
-// larger base point and tighter leading prevents awkward word justification gaps.
-const MALAYALAM_BODY_PT_BASE = 8.8
-const MALAYALAM_BODY_PT_MAX = 9.8
-const MALAYALAM_BODY_PT_FLOOR = 7.8
+const bodyOverflows = (element) =>
+  element.scrollWidth - element.clientWidth > 1.5 ||
+  element.scrollHeight - element.clientHeight > 1.5
 
-// Leading is opened per section to close the gap the shared size cannot, since
-// it cannot rise past the fullest section. The base matches the capacity maths;
-// the ceiling keeps a sparse column from reading as airy.
-const BODY_LEADING_BASE = 1.35
-const BODY_LEADING_MAX = 1.9
-const BODY_LEADING_STEP = 0.05
+function setBodyText(element, text, isMalayalam) {
+  const figure = Array.from(element.children).find((child) => child.tagName === 'FIGURE')
+  for (const child of Array.from(element.childNodes)) {
+    if (child !== figure) child.remove()
+  }
+  const displayText = isMalayalam ? formatMalayalamNewspaperText(text) : text
+  if (displayText) element.append(document.createTextNode(displayText))
+}
 
-const MALAYALAM_LEADING_BASE = 1.40
-const MALAYALAM_LEADING_MAX = 1.50
+/** Tests the exact fixed-size PDF body boxes and returns only complete sentences that fit. */
+function fittedSentencePrefix({
+  sectionElement,
+  block,
+  content,
+  isLeadPhoto,
+  leftRatio,
+  leftCharLimit,
+  isMalayalam,
+}) {
+  const bodies = Array.from(sectionElement.querySelectorAll('[data-copyfit]'))
+  if (!bodies.length || !bodies.some(bodyOverflows)) return content
+
+  const showText = (candidate) => {
+    if (isLeadPhoto) {
+      const split = splitLeadStoryText(
+        candidate,
+        block.span,
+        leftRatio,
+        leftCharLimit,
+        isMalayalam ? 'malayalam' : 'english',
+      )
+      setBodyText(bodies[0], split.leftText, isMalayalam)
+      if (bodies[1]) setBodyText(bodies[1], split.rightText, isMalayalam)
+    } else {
+      setBodyText(bodies[0], candidate, isMalayalam)
+    }
+  }
+
+  let fitted = ''
+  const ends = sentenceEndOffsets(content, isMalayalam ? 'malayalam' : 'english')
+  for (let index = ends.length - 1; index >= 0; index -= 1) {
+    const candidate = content.slice(0, ends[index]).trimEnd()
+    if (!candidate || candidate.length >= content.length) continue
+    showText(candidate)
+    if (bodies.every((body) => !bodyOverflows(body))) {
+      fitted = candidate
+      break
+    }
+  }
+
+  const original = isLeadPhoto
+    ? splitLeadStoryText(
+        content,
+        block.span,
+        leftRatio,
+        leftCharLimit,
+        isMalayalam ? 'malayalam' : 'english',
+      )
+    : { leftText: content, rightText: '' }
+  setBodyText(bodies[0], original.leftText, isMalayalam)
+  if (bodies[1]) setBodyText(bodies[1], original.rightText, isMalayalam)
+  return fitted
+}
 
 const formatLongDate = (iso) => {
   const date = iso ? new Date(`${iso}T00:00:00`) : new Date()
@@ -77,6 +132,10 @@ export default function PrintEdition() {
   const editionId = searchParams.get('edition')
 
   const [edition, setEdition] = useState(null)
+  const [fontMetricsReady, setFontMetricsReady] = useState(
+    () => typeof document === 'undefined' || !document.fonts || document.fonts.status === 'loaded',
+  )
+  const [printFit, setPrintFit] = useState({ editionId: null, contents: EMPTY_PRINT_CONTENTS, ready: false })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [completing, setCompleting] = useState(false)
@@ -87,7 +146,7 @@ export default function PrintEdition() {
   // The layout the editor was using, so the printed sheet matches the preview.
   const pages = useMemo(() => buildPages(readTemplates(editionId)), [editionId])
 
-  // Holds the fitted body size for every sheet at once.
+  // Holds the fixed-size sheets while their actual copy is measured.
   const sheetsRef = useRef(null)
 
   // The browser's "Save as PDF" dialog seeds its filename from document.title.
@@ -141,13 +200,109 @@ export default function PrintEdition() {
     return map
   }, [edition])
 
+  const printContents = printFit.editionId === editionId ? printFit.contents : EMPTY_PRINT_CONTENTS
+  const printFitReady = printFit.editionId === editionId && printFit.ready
+  const printSections = useMemo(() => {
+    if (!Object.keys(printContents).length) return sections
+    const fitted = { ...sections }
+    for (const [key, content] of Object.entries(printContents)) {
+      if (fitted[key]) fitted[key] = { ...fitted[key], content }
+    }
+    return fitted
+  }, [printContents, sections])
+  const capacityLanguage = isMalayalamEdition(edition) ? 'malayalam' : 'english'
+
+  useLayoutEffect(() => {
+    if (!edition || !sheetsRef.current) return undefined
+    let active = true
+
+    const measurePrintCopy = async () => {
+      if (document.fonts?.ready) await document.fonts.ready
+      if (!active) return
+      setFontMetricsReady(true)
+
+      const root = sheetsRef.current
+      if (!root) return
+      const elementsByKey = new Map(
+        Array.from(root.querySelectorAll('[data-section-key]')).map((element) => [
+          element.dataset.sectionKey,
+          element,
+        ]),
+      )
+      const nextContents = { ...printContents }
+      const isMalayalam = isMalayalamEdition(edition)
+
+      for (const page of pages) {
+        for (const block of page.blocks) {
+          const rowIndex = page.rows.findIndex((row) =>
+            row.blocks.some((candidate) => candidate.section_key === block.section_key),
+          )
+          const section = sections[block.section_key]
+          const content = printContents[block.section_key] ?? cleanSectionContent(section?.content ?? '')
+          const sectionTitle = cleanSectionTitle(section?.title, section?.content)
+          if (!content) continue
+
+          const sectionElement = elementsByKey.get(block.section_key)
+          if (!sectionElement) continue
+          const hasPhoto = Boolean(section?.image_url && section?.photoMode !== 'none')
+          const isLeadPhoto = hasPhoto && page.blocks[0]?.section_key === block.section_key
+          const leftRatio = isLeadPhoto
+            ? getLeadStoryLeftRatio(
+                block,
+                page.rows.length,
+                rowHeight(page, rowIndex),
+                section?.image_caption,
+                sectionTitle,
+                capacityLanguage,
+              )
+            : null
+          const leftCharLimit = isLeadPhoto
+            ? leadStoryLeftCharLimitFor({
+                sectionKey: block.section_key,
+                pages,
+                language: capacityLanguage,
+                sectionTitle,
+              })
+            : null
+          const fitted = fittedSentencePrefix({
+            sectionElement,
+            block,
+            content,
+            isLeadPhoto,
+            leftRatio,
+            leftCharLimit,
+            isMalayalam,
+          })
+
+          if (fitted !== content) nextContents[block.section_key] = fitted
+        }
+      }
+
+      if (!active) return
+      setPrintFit((current) => {
+        const currentContents = current.editionId === editionId ? current.contents : EMPTY_PRINT_CONTENTS
+        const changed = Object.keys(nextContents).some((key) => nextContents[key] !== currentContents[key])
+        if (changed) return { editionId, contents: nextContents, ready: false }
+        if (current.editionId === editionId && current.ready) return current
+        return { editionId, contents: nextContents, ready: true }
+      })
+    }
+
+    measurePrintCopy()
+    return () => {
+      active = false
+    }
+  }, [editionId, edition, pages, sections, printContents, capacityLanguage])
+
   // The same rule the server's /validate applies, checked here so the page can
   // explain exactly what is missing instead of printing a half-empty paper.
   const missing = useMemo(
     () =>
       pages.flatMap((page) => page.blocks).filter((block) => {
         const section = sections[block.section_key]
-        return !(section?.title && section?.content && section.status === 'completed')
+        const title = cleanSectionTitle(section?.title, section?.content)
+        const content = cleanSectionContent(section?.content ?? '')
+        return !(title && content && section.status === 'completed')
       }),
     [pages, sections],
   )
@@ -156,20 +311,47 @@ export default function PrintEdition() {
   // them. Not a blocker — a writer may want a short piece — but worth saying
   // before the paper is committed to print.
   const thin = useMemo(
-    () =>
-      pages.flatMap((page) => page.blocks)
-        .map((block) => {
-          const section = sections[block.section_key]
-          const capacity = printCapacityFor(block.section_key, pages) ?? block.charLimit
-          const length = section?.content?.length ?? 0
-          return { block, capacity, length, fill: length / capacity }
-        })
-        .filter((entry) => entry.length > 0 && entry.fill < 0.6),
-    [pages, sections],
+    () => {
+      if (!fontMetricsReady) return []
+      return pages
+        .flatMap((page) =>
+          page.blocks.map((block) => {
+            const section = sections[block.section_key]
+            const isFirst = page.blocks[0]?.section_key === block.section_key
+            const hasPhoto = Boolean(section?.image_url && section?.photoMode !== 'none')
+            const capacity =
+              effectiveCapacityFor({
+                sectionKey: block.section_key,
+                pages,
+                language: capacityLanguage,
+                hasPhoto,
+                isFirstSection: isFirst,
+                photoCaption: section?.image_caption,
+                sectionTitle: cleanSectionTitle(section?.title, section?.content),
+              }) ?? block.charLimit
+            const length = cleanSectionContent(section?.content ?? '').length
+            return { block, capacity, length, fill: length / capacity }
+          }),
+        )
+        .filter((entry) => entry.length > 0 && entry.fill < MIN_FILL_RATIO)
+    },
+    [capacityLanguage, fontMetricsReady, pages, sections],
   )
 
-  // Refits whenever the edition's copy changes.
-  useCopyfit(sheetsRef, edition)
+  const truncatedSections = useMemo(
+    () =>
+      pages.flatMap((page) =>
+        page.blocks.flatMap((block) => {
+          if (!Object.hasOwn(printContents, block.section_key)) return []
+          const original = cleanSectionContent(sections[block.section_key]?.content ?? '')
+          const fitted = printContents[block.section_key]
+          return original !== fitted ? [{ block, original, fitted }] : []
+        }),
+      ),
+    [pages, printContents, sections],
+  )
+
+  const noCompleteSentenceFits = truncatedSections.filter((entry) => !entry.fitted)
 
   if (loading) {
     return <Centered>Loading edition…</Centered>
@@ -237,11 +419,12 @@ export default function PrintEdition() {
           <button
             type="button"
             onClick={() => window.print()}
-            disabled={missing.length > 0}
+            disabled={missing.length > 0 || !printFitReady || noCompleteSentenceFits.length > 0}
+            title={!printFitReady ? 'Measuring copy against the fixed PDF layout' : undefined}
             className="inline-flex items-center gap-2 rounded-xl bg-navy-900 px-6 py-3 text-[15px] font-semibold text-white transition hover:bg-navy-700 disabled:opacity-50"
           >
             <CheckIcon className="size-5" />
-            Print / Save as PDF
+            {printFitReady ? 'Print / Save as PDF' : 'Preparing PDF…'}
           </button>
         </div>
       </header>
@@ -274,11 +457,24 @@ export default function PrintEdition() {
         </div>
       )}
 
+      {truncatedSections.length > 0 && (
+        <div className="no-print mx-auto mt-6 max-w-[900px] rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-[15px] text-amber-900">
+          <p className="font-semibold">
+            The fixed-size PDF will include complete sentences that fit each text box.
+          </p>
+          <p className="mt-1">
+            {noCompleteSentenceFits.length > 0
+              ? `No complete sentence fits in: ${noCompleteSentenceFits.map(({ block }) => block.section_name).join(', ')}. Shorten those sections before printing.`
+              : `Trailing copy is omitted from: ${truncatedSections.map(({ block }) => block.section_name).join(', ')}.`}
+          </p>
+        </div>
+      )}
+
       {missing.length === 0 && thin.length > 0 && (
         <div className="no-print mx-auto mt-6 max-w-[900px] rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-[15px] text-amber-900">
           <p className="font-semibold">
             {thin.length} section{thin.length === 1 ? '' : 's'} will leave white space — the text
-            fills less than 60% of the box.
+            fills less than {Math.round(MIN_FILL_RATIO * 100)}% of the box.
           </p>
           <p className="mt-1">
             {thin
@@ -298,20 +494,22 @@ export default function PrintEdition() {
         </div>
       )}
 
-      {/* The fitted body size lands on this element as --body-pt, so every
-          sheet below inherits exactly the same size. */}
       <div
         ref={sheetsRef}
-        style={{ '--body-pt': `${BODY_PT_BASE}pt` }}
+        style={{
+          '--body-pt': `${capacityLanguage === 'malayalam' ? TYPE.malayalamBodyPt : TYPE.bodyPt}pt`,
+        }}
         className="flex flex-col items-center gap-8 px-6 py-8 print:gap-0 print:p-0"
       >
         {pages.map((page) => (
           <Sheet
             key={page.page_number}
             page={page}
+            pages={pages}
             totalPages={pages.length}
             edition={edition}
-            sections={sections}
+            sections={printSections}
+            capacityLanguage={capacityLanguage}
           />
         ))}
       </div>
@@ -376,15 +574,16 @@ function Masthead({ name }) {
   ))
 }
 
-function Sheet({ page, totalPages, edition, sections }) {
+function Sheet({ page, pages, totalPages, edition, sections, capacityLanguage }) {
   const isFront = page.page_number === 1
   const isMalayalam = isMalayalamEdition(edition)
 
   return (
     <article
       className={`print-sheet bg-white text-black shadow-[0_10px_40px_-24px_rgba(15,32,68,0.5)] print:shadow-none ${
-        isMalayalam ? 'edition-malayalam' : ''
+        isMalayalam ? 'edition-malayalam' : 'edition-english'
       }`}
+      lang={isMalayalam ? 'ml' : 'en'}
       style={{
         width: SHEET.width + 'mm',
         height: SHEET.height + 'mm',
@@ -425,25 +624,54 @@ function Sheet({ page, totalPages, edition, sections }) {
           gridTemplateRows: page.rows.map((row) => `${row.weight}fr`).join(' '),
         }}
       >
-        {page.rows.flatMap((row) =>
+        {page.rows.flatMap((row, rowIndex) =>
           row.blocks.map((block) => {
             const section = sections[block.section_key]
+            const isFirst = page.blocks[0]?.section_key === block.section_key
+            const hasPhoto = Boolean(section?.image_url && section?.photoMode !== 'none')
+            const rawTitle = cleanSectionTitle(section?.title, section?.content)
+            const leadLeftCharLimit = isFirst && hasPhoto
+              ? leadStoryLeftCharLimitFor({
+                  sectionKey: block.section_key,
+                  pages,
+                  language: capacityLanguage,
+                  sectionTitle: rawTitle,
+                })
+              : null
+            const title = isMalayalam ? formatMalayalamNewspaperText(rawTitle) : rawTitle
+
             return (
               <section
                 key={block.section_key}
+                data-section-key={block.section_key}
                 className="flex min-h-0 flex-col overflow-hidden border-t border-black/30 pt-1.5"
                 style={{ gridColumn: `span ${block.span} / span ${block.span}` }}
               >
                 <p className="text-[7.5pt] font-bold tracking-[0.12em] uppercase">
                   {section?.section_name?.trim() || block.section_name}
                 </p>
-                <h2 className="mt-1 font-serif text-[20pt] leading-[1.1]">
-                  {isMalayalam ? formatMalayalamNewspaperText(section?.title) : section?.title}
+                <h2
+                  className={`mt-1 font-serif leading-[1.1] ${
+                    isMalayalam
+                      ? 'text-[20pt]'
+                      : block.span === 3
+                        ? 'text-[22pt]'
+                        : block.span === 2
+                          ? 'text-[16pt]'
+                          : 'text-[13pt]'
+                  }`}
+                >
+                  {title}
                 </h2>
-                <BodyColumns
-                  columns={COLUMNS[block.span]}
-                  text={section?.content ?? ''}
+                <SectionBody
+                  block={block}
+                  section={section}
+                  isFirstSection={isFirst}
+                  hasPhoto={hasPhoto}
                   isMalayalam={isMalayalam}
+                  totalRows={page.rows.length}
+                  rowHeightMm={rowHeight(page, rowIndex)}
+                  leadLeftCharLimit={leadLeftCharLimit}
                 />
               </section>
             )
@@ -463,124 +691,63 @@ function Sheet({ page, totalPages, edition, sections }) {
   )
 }
 
-/**
- * Fits one body size for the whole edition.
- *
- * Body text is one size throughout, as in any newspaper — sizing each block
- * independently left the paper set in a jumble of point sizes.
- *
- * The subtlety is over-long sections. A section carrying slightly more copy
- * than its box holds (crime_civic ran to 103% of capacity) cannot fit at any
- * shared size, and letting it drive the shared decision dragged the entire
- * edition down to the minimum and left every other page half empty. So a
- * section that overflows even at the base size is set aside: the shared size is
- * fitted to the rest, and the overflowing one is shrunk on its own until its
- * copy fits. One block in slightly smaller type is a far smaller price than a
- * whole paper of undersized text.
- */
-function useCopyfit(containerRef, edition) {
-  useLayoutEffect(() => {
-    const root = containerRef.current
-    if (!root) return undefined
-
-    const isMalayalam = isMalayalamEdition(edition)
-    const ptBase = isMalayalam ? MALAYALAM_BODY_PT_BASE : BODY_PT_BASE
-    const ptMax = isMalayalam ? MALAYALAM_BODY_PT_MAX : BODY_PT_MAX
-    const ptFloor = isMalayalam ? MALAYALAM_BODY_PT_FLOOR : BODY_PT_FLOOR
-    const leadingBase = isMalayalam ? MALAYALAM_LEADING_BASE : BODY_LEADING_BASE
-    const leadingMax = isMalayalam ? MALAYALAM_LEADING_MAX : BODY_LEADING_MAX
-
-    const bodies = () => Array.from(root.querySelectorAll('[data-copyfit]'))
-
-    /**
-     * A fixed-height multi-column box does not overflow downwards — the browser
-     * lays surplus text into further columns to the *right*, past the edge. So
-     * overflow is `scrollWidth`, not `scrollHeight`; testing the height
-     * silently reported "it fits" and let text spill into clipped columns.
-     */
-    const overflowing = (el) => el.scrollWidth > el.clientWidth + 1
-
-    const apply = (pt) => root.style.setProperty('--body-pt', `${pt}pt`)
-
-    const fit = () => {
-      const all = bodies()
-      if (!all.length) return
-
-      // Drop any per-section font size overrides so EVERY section strictly shares the same font size
-      all.forEach((el) => {
-        el.style.fontSize = ''
-      })
-
-      // Strictly uniform font size across all blocks in the entire edition.
-      // No section is ever set to a different font size than another section.
-      let size = ptBase
-      apply(size)
-
-      // Find the uniform font size where all blocks fit without overflowing
-      while (size > ptFloor && all.some(overflowing)) {
-        size -= BODY_PT_STEP
-        apply(size)
-      }
-
-      // Strictly ensure NO section ever has an individual font size override
-      all.forEach((el) => {
-        el.style.fontSize = ''
-      })
-
-      if (isMalayalam) {
-        // Uniform tight leading for Malayalam
-        all.forEach((el) => {
-          el.style.lineHeight = String(leadingBase)
-        })
-      } else {
-        // Vertical justification via leading for English (closes white space without changing font size)
-        for (const el of all) {
-          let leading = leadingBase
-          el.style.lineHeight = String(leading)
-          while (leading < leadingMax) {
-            const next = +(leading + BODY_LEADING_STEP).toFixed(2)
-            el.style.lineHeight = String(next)
-            if (overflowing(el)) {
-              el.style.lineHeight = String(leading)
-              break
-            }
-            leading = next
-          }
-        }
-      }
-    }
-
-    fit()
-
-    if (isMalayalam && typeof document !== 'undefined' && document.fonts) {
-      document.fonts.ready.then(fit)
-    }
-
-    // Column widths change when the preview is scaled or the window resized.
-    const observer = new ResizeObserver(fit)
-    observer.observe(root)
-    return () => observer.disconnect()
-  }, [containerRef, edition])
-}
 
 /**
- * Body copy in newspaper columns. The point size is deliberately not set here:
- * every section inherits the one edition-wide size fitted by `useCopyfit`.
+ * Body copy in newspaper columns. Every section inherits the fixed edition
+ * body size set on the sheet container.
  */
-function BodyColumns({ columns, text, isMalayalam }) {
+function BodyColumns({ columns, text, isMalayalam, photo, caption, photoHeightMm, className = 'mt-1.5' }) {
   const formattedText = useMemo(() => {
     if (!isMalayalam || !text) return text
     return formatMalayalamNewspaperText(text)
   }, [text, isMalayalam])
 
+  const photoFigure = photo ? (
+    <figure
+      style={{
+        breakInside: 'avoid',
+        WebkitColumnBreakInside: 'avoid',
+        pageBreakInside: 'avoid',
+        width: '100%',
+        marginBottom: '1.5mm',
+        display: 'block',
+      }}
+    >
+      <img
+        src={photo}
+        alt=""
+        style={{
+          width: '100%',
+          height: (photoHeightMm || 32) + 'mm',
+          objectFit: 'cover',
+          display: 'block',
+          filter: 'contrast(1.05)',
+        }}
+      />
+      {caption && (
+        <figcaption
+          style={{
+            fontSize: '6.8pt',
+            fontStyle: 'italic',
+            color: 'rgba(0,0,0,0.75)',
+            lineHeight: 1.15,
+            marginTop: '0.8mm',
+          }}
+        >
+          {caption}
+        </figcaption>
+      )}
+    </figure>
+  ) : null
+
   if (isMalayalam) {
     return (
       <div
         data-copyfit
-        className="mt-1.5 min-h-0 flex-1 overflow-hidden"
+        className={`${className} min-h-0 flex-1 overflow-hidden`}
         style={{
           fontSize: 'var(--body-pt)',
-          lineHeight: MALAYALAM_LEADING_BASE,
+          lineHeight: TYPE.malayalamBodyLeading,
           columnCount: columns,
           columnGap: GRID_GAP + 'mm',
           columnRule: '0.4pt solid rgba(0,0,0,0.25)',
@@ -592,26 +759,170 @@ function BodyColumns({ columns, text, isMalayalam }) {
           hyphens: 'none',
         }}
       >
+        {photoFigure}
         {formattedText}
       </div>
     )
   }
 
-  // Exact original English implementation
+  // Exact original English implementation with uniform point size and hyphens
   return (
     <div
       data-copyfit
-      className="mt-1.5 min-h-0 flex-1 overflow-hidden text-justify hyphens-auto"
+      className={`${className} min-h-0 flex-1 overflow-hidden text-justify hyphens-auto`}
       style={{
         fontSize: 'var(--body-pt)',
-        lineHeight: BODY_LEADING_BASE,
+        lineHeight: TYPE.bodyLeading,
         columnCount: columns,
         columnGap: GRID_GAP + 'mm',
         columnRule: '0.4pt solid rgba(0,0,0,0.25)',
       }}
     >
+      {photoFigure}
       {text}
     </div>
+  )
+}
+
+/**
+ * Renders the body area of a printed newspaper section with column-locked photo placement.
+ * - First News Section on Every Page: photo locked to last two columns on right, text on left and underneath photo
+ * - All Other News Sections: single photo locked to top of first column, text starting underneath and continuing into remaining columns
+ * - Text-Only Sections: standard multi-column layout
+ */
+function SectionBody({
+  block,
+  section,
+  isFirstSection,
+  hasPhoto,
+  isMalayalam,
+  totalRows = 3,
+  rowHeightMm,
+  leadLeftCharLimit,
+}) {
+  const content = cleanSectionContent(section?.content ?? '')
+
+  // Case 1: First News Section with active photo
+  if (isFirstSection && hasPhoto) {
+    const totalCols = COLUMNS[block.span]
+    const leftCols = Math.max(1, totalCols - 2)
+    const rightCols = totalCols - leftCols
+    const leftRatio = getLeadStoryLeftRatio(
+      block,
+      totalRows,
+      rowHeightMm,
+      section.image_caption,
+      cleanSectionTitle(section?.title, section?.content),
+      isMalayalam ? 'malayalam' : 'english',
+    )
+    const { leftText, rightText } = splitLeadStoryText(
+      content,
+      block.span,
+      leftRatio,
+      leadLeftCharLimit,
+      isMalayalam ? 'malayalam' : 'english',
+    )
+
+    const leadPhotoHeightMm = block.span === 3 ? 42 : block.span === 2 ? 36 : 28
+
+    return (
+      <div className="mt-1.5 flex flex-1 min-h-0 overflow-hidden">
+        {/* Left columns (e.g. 3 cols for span 3, 1 col for span 2) */}
+        <div
+          className="flex flex-col min-h-0 min-w-0"
+          style={{
+            flex: leftCols,
+            paddingRight: GRID_GAP / 2 + 'mm',
+            borderRight: '0.4pt solid rgba(0,0,0,0.25)',
+          }}
+        >
+          <BodyColumns
+            columns={leftCols}
+            text={leftText}
+            isMalayalam={isMalayalam}
+          />
+        </div>
+
+        {/* Right side locked photo spanning last columns */}
+        <div
+          className="flex flex-col min-h-0 min-w-0 overflow-hidden"
+          style={{
+            flex: rightCols,
+            paddingLeft: GRID_GAP / 2 + 'mm',
+          }}
+        >
+          <figure
+            style={{
+              width: '100%',
+              marginBottom: '1.2mm',
+              display: 'block',
+              flexShrink: 0,
+            }}
+          >
+            <img
+              src={section.image_url}
+              alt=""
+              style={{
+                width: '100%',
+                height: leadPhotoHeightMm + 'mm',
+                objectFit: 'cover',
+                display: 'block',
+                filter: 'contrast(1.05)',
+              }}
+            />
+            {section.image_caption && (
+              <figcaption
+                style={{
+                  fontSize: '6.8pt',
+                  fontStyle: 'italic',
+                  color: 'rgba(0,0,0,0.75)',
+                  lineHeight: 1.15,
+                  marginTop: '0.6mm',
+                }}
+              >
+                {section.image_caption}
+              </figcaption>
+            )}
+          </figure>
+
+          {/* Continuing body text underneath the photo */}
+          {rightText ? (
+            <BodyColumns
+              columns={rightCols}
+              text={rightText}
+              isMalayalam={isMalayalam}
+              className="mt-0"
+            />
+          ) : (
+            <div className="flex-1 min-h-0" />
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Case 2: All Other News Sections with photo (single photo in first column at top)
+  if (hasPhoto) {
+    const photoHeightMm = block.size === 'small' ? 24 : 33
+    return (
+      <BodyColumns
+        columns={COLUMNS[block.span]}
+        text={content}
+        photo={section.image_url}
+        caption={section.image_caption}
+        photoHeightMm={photoHeightMm}
+        isMalayalam={isMalayalam}
+      />
+    )
+  }
+
+  // Case 3: Text-only sections (photoMode === 'none')
+  return (
+    <BodyColumns
+      columns={COLUMNS[block.span]}
+      text={content}
+      isMalayalam={isMalayalam}
+    />
   )
 }
 

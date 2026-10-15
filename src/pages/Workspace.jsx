@@ -265,7 +265,7 @@ export default function Workspace() {
             <div
               className={
                 layout === 'grid'
-                  ? 'mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                  ? 'mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
                   : 'mt-8 flex flex-col gap-4'
               }
             >

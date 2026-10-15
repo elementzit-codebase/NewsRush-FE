@@ -290,10 +290,15 @@ export const saveSection = (editionId, section) =>
  * POST /api/ai/expand — grows a summary into a column-fitting article.
  * @returns {Promise<{expanded_content: string, generated_title: string}>}
  */
-export const expandContent = ({ summary, characterLimit, language }) =>
+export const expandContent = ({ summary, characterLimit, language, includePhoto }) =>
   request('/api/ai/expand', {
     method: 'POST',
-    body: { summary, character_limit: characterLimit, ...(language ? { language } : {}) },
+    body: {
+      summary,
+      character_limit: characterLimit,
+      ...(language ? { language } : {}),
+      ...(includePhoto !== undefined ? { include_photo: includePhoto } : {}),
+    },
   })
 
 /**
