@@ -119,7 +119,12 @@ export default function Workspace() {
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const filtered = editions.filter((edition) => {
-      const matchesFilter = filter === 'all' || edition.status === filter
+      const matchesFilter =
+        filter === 'all'
+          ? true
+          : filter === 'draft'
+            ? edition.status !== 'completed'
+            : edition.status === filter
       const matchesQuery =
         !needle ||
         edition.newspaper_name.toLowerCase().includes(needle) ||

@@ -13,8 +13,6 @@ export const STATUS_LABELS = {
 export const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'draft', label: 'Draft' },
-  { key: 'in_progress', label: 'In Progress' },
-  { key: 'ready', label: 'Ready' },
   { key: 'completed', label: 'Completed' },
 ]
 
