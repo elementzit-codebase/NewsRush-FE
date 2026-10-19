@@ -216,7 +216,11 @@ function buildCapacityTable(pages, language, titleSectionKey, sectionTitle) {
         // Fall back to the static value when the font cannot be measured.
         const measuredPerColumn = perColumn ?? block.charLimit / columns
         perColumnTable[block.section_key] = measuredPerColumn
-        table[block.section_key] = Math.min(measuredPerColumn * columns, MAX_REQUESTABLE_CHARS)
+        // This is the section's print capacity, so keep the full geometric
+        // result. MAX_REQUESTABLE_CHARS is only an AI endpoint limit; applying
+        // it here made large template rows look full in the editor even when
+        // their printed boxes had room for substantially more copy.
+        table[block.section_key] = measuredPerColumn * columns
       }
     })
   }
