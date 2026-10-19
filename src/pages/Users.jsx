@@ -99,11 +99,11 @@ export default function Users() {
   }
 
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex min-h-screen flex-col md:flex-row bg-white">
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[76px] items-center justify-end border-b border-line px-8 lg:px-12">
+        <header className="hidden md:flex h-[76px] items-center justify-end border-b border-line px-8 lg:px-12">
           <Link
             to="/profile"
             className="flex items-center gap-3 rounded-2xl px-3 py-1.5 transition hover:bg-slate-50"
@@ -121,7 +121,7 @@ export default function Users() {
           </Link>
         </header>
 
-        <main className="min-w-0 flex-1 px-8 py-8 lg:px-12">
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-8 lg:px-12">
           <h1 className="text-[clamp(28px,3vw,40px)] font-bold text-navy-900">Users</h1>
           <p className="mt-2 text-[17px] text-muted">
             Approve new registrations so they can sign in.

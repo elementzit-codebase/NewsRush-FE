@@ -153,6 +153,10 @@ export const PhotoIcon = (p) => (
 export const UploadIcon = (p) => (
   <Svg {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></Svg>
 )
+export const MenuIcon = (p) => (
+  <Svg {...p}><path d="M4 6h16M4 12h16M4 18h16" /></Svg>
+)
+
 
 
 

@@ -709,7 +709,7 @@ export default function CreateTask() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-white">
+      <div className="flex min-h-screen flex-col md:flex-row bg-white">
         <Sidebar variant="panel" />
         <p className="m-auto text-muted">Loading edition…</p>
       </div>
@@ -718,7 +718,7 @@ export default function CreateTask() {
 
   if (error && !edition) {
     return (
-      <div className="flex min-h-screen bg-white">
+      <div className="flex min-h-screen flex-col md:flex-row bg-white">
         <Sidebar variant="panel" />
         <div className="m-auto text-center">
           <p role="alert" className="text-[17px] font-semibold text-red-700">
@@ -733,7 +733,7 @@ export default function CreateTask() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white">
+    <div className="flex h-screen flex-col md:flex-row overflow-hidden bg-white">
       <Sidebar variant="panel" />
 
       {/* Page picker */}
