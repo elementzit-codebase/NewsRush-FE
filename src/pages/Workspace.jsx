@@ -119,7 +119,12 @@ export default function Workspace() {
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const filtered = editions.filter((edition) => {
-      const matchesFilter = filter === 'all' || edition.status === filter
+      const matchesFilter =
+        filter === 'all'
+          ? true
+          : filter === 'draft'
+            ? edition.status !== 'completed'
+            : edition.status === filter
       const matchesQuery =
         !needle ||
         edition.newspaper_name.toLowerCase().includes(needle) ||
@@ -265,7 +270,7 @@ export default function Workspace() {
             <div
               className={
                 layout === 'grid'
-                  ? 'mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                  ? 'mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
                   : 'mt-8 flex flex-col gap-4'
               }
             >

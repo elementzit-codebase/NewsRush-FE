@@ -233,6 +233,15 @@ export function uploadProfilePicture(file) {
 export const removeProfilePicture = () =>
   request('/api/users/me/profile-pic', { method: 'DELETE' })
 
+/* --------------------------------------------------------------- uploads */
+
+/** POST /api/uploads/image — JPEG, PNG, WebP or GIF, up to 10 MB. Returns { image_url, url } */
+export function uploadArticleImage(file) {
+  const form = new FormData()
+  form.append('file', file)
+  return request('/api/uploads/image', { method: 'POST', body: form, isForm: true })
+}
+
 /* -------------------------------------------------------------- editions */
 
 /** GET /api/editions — only the signed-in user's editions, newest date first. */
@@ -290,10 +299,15 @@ export const saveSection = (editionId, section) =>
  * POST /api/ai/expand — grows a summary into a column-fitting article.
  * @returns {Promise<{expanded_content: string, generated_title: string}>}
  */
-export const expandContent = ({ summary, characterLimit, language }) =>
+export const expandContent = ({ summary, characterLimit, language, includePhoto }) =>
   request('/api/ai/expand', {
     method: 'POST',
-    body: { summary, character_limit: characterLimit, ...(language ? { language } : {}) },
+    body: {
+      summary,
+      character_limit: characterLimit,
+      ...(language ? { language } : {}),
+      ...(includePhoto !== undefined ? { include_photo: includePhoto } : {}),
+    },
   })
 
 /**

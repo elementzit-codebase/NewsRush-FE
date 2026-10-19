@@ -10,17 +10,27 @@ import {
   InfoIcon,
   MicIcon,
   PencilIcon,
+  PhotoIcon,
   PrinterIcon,
+  RefreshCwIcon,
   SparkleIcon,
   StopIcon,
   TrashIcon,
+  UploadIcon,
   XIcon,
 } from '../components/Icons'
 import { ALL_BLOCKS, PAGES, TOTAL_SECTIONS, blockFor } from '../data/sections'
 import * as api from '../lib/api'
 import { useSpeechRecognition } from '../lib/useSpeechRecognition'
 import { useMicLevel } from '../lib/useMicLevel'
-import { printCapacityFor } from '../lib/capacity'
+import {
+  effectiveCapacityFor,
+  generationTargetFor,
+  MIN_FILL_RATIO,
+  printCapacityFor,
+  truncateAtSentenceBoundary,
+} from '../lib/capacity'
+import { cleanSectionContent, cleanSectionTitle } from '../lib/contentSanitizer'
 import { buildPage, buildPages, templatesForPage } from '../data/templates'
 import { readTemplates, writeTemplate } from '../lib/templateStore'
 
@@ -30,24 +40,39 @@ const AUTOSAVE_MS = 2000
 function toSectionMap(saved = []) {
   const map = {}
   for (const section of saved) {
+    const hasImg = Boolean(section.image_url)
     map[section.section_key] = {
-      title: section.title ?? '',
-      content: section.content ?? '',
+      title: cleanSectionTitle(section.title, section.content),
+      content: cleanSectionContent(section.content ?? ''),
       status: section.status ?? 'draft',
       // The label is stored per section on the server (SectionBase.section_name),
       // so a rename survives a reload. Empty means "use the canonical name".
       section_name: section.section_name ?? '',
+      image_url: section.image_url ?? '',
+      image_caption: section.image_caption ?? '',
+      photoMode: hasImg
+        ? (section.image_url.startsWith('/uploads/') || section.image_url.startsWith('data:') || section.image_url.startsWith('blob:') ? 'upload' : 'ai')
+        : 'none',
     }
   }
   return map
 }
 
-const emptySection = { title: '', content: '', status: 'draft', section_name: '' }
+const emptySection = {
+  title: '',
+  content: '',
+  status: 'draft',
+  section_name: '',
+  image_url: '',
+  image_caption: '',
+  photoMode: 'none',
+}
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** Spacing between bulk AI calls, to stay clear of upstream rate limits. */
 const FILL_PACING_MS = 800
+const FILL_EXPANSION_PASSES = 2
 
 /**
  * Runs an AI call, retrying once after a pause. The upstream model returns
@@ -70,6 +95,10 @@ export default function CreateTask() {
   const editionId = searchParams.get('edition')
 
   const [edition, setEdition] = useState(null)
+  const [fontMetricsReady, setFontMetricsReady] = useState(
+    () => typeof document === 'undefined' || !document.fonts,
+  )
+  const editionLanguage = (edition?.language || 'malayalam').toLowerCase()
   const [sections, setSections] = useState({})
   const [pageIndex, setPageIndex] = useState(0)
   const [activeKey, setActiveKey] = useState(PAGES[0].blocks[0].section_key)
@@ -81,6 +110,31 @@ export default function CreateTask() {
   const [generating, setGenerating] = useState(false)
   const [validation, setValidation] = useState(null)
   const [fill, setFill] = useState({ running: false, done: 0, total: 0, failed: [] })
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.fonts || fontMetricsReady) return undefined
+    let active = true
+
+    const preparePrintFonts = async () => {
+      await document.fonts.ready
+      const fontSamples = [
+        ['8.5pt Inter', 'The quick brown fox jumps over the lazy dog.'],
+        ['22pt "Playfair Display"', 'The quick brown fox jumps over the lazy dog.'],
+        ['8.8pt "Anek Malayalam"', '\u0D15\u0D47\u0D30\u0D33\u0D24\u0D4D\u0D24\u0D3F\u0D32\u0D46'],
+        ['20pt "Noto Serif Malayalam"', '\u0D15\u0D47\u0D30\u0D33\u0D24\u0D4D\u0D24\u0D3F\u0D32\u0D46'],
+      ]
+      await Promise.all(
+        fontSamples.map(([font, sample]) => document.fonts.load(font, sample).catch(() => [])),
+      )
+      await document.fonts.ready
+      if (active) setFontMetricsReady(true)
+    }
+
+    preparePrintFonts()
+    return () => {
+      active = false
+    }
+  }, [fontMetricsReady])
 
   // Auto-dismiss readiness check toast notification after 6 seconds
   useEffect(() => {
@@ -109,11 +163,25 @@ export default function CreateTask() {
   // section; a blank override just means the canonical name from sections.js.
   const activeName = activeSection.section_name?.trim() || block.section_name
   const nameIsCustom = activeName !== block.section_name
+  const activeTitle = cleanSectionTitle(activeSection.title, activeSection.content)
 
-  // How much text this section's box holds on the printed sheet. Derived from
-  // the print geometry, not the on-screen preview block — sizing copy to the
-  // preview is what left the exported PDF 11% full.
-  const charLimit = printCapacityFor(activeKey, pages) ?? block.charLimit
+  // How much text this section's box holds on the printed sheet.
+  // When an optional photo is active, capacity is proportionally reduced
+  // based on the column and vertical space occupied so the story never overflows.
+  const isFirstSection = page?.blocks[0]?.section_key === activeKey
+  const hasActivePhoto = Boolean(
+    (activeSection.photoMode && activeSection.photoMode !== 'none') || activeSection.image_url
+  )
+  const baseCharLimit = printCapacityFor(activeKey, pages, editionLanguage, activeTitle) ?? block.charLimit
+  const charLimit = effectiveCapacityFor({
+    sectionKey: activeKey,
+    pages,
+    language: editionLanguage,
+    hasPhoto: hasActivePhoto,
+    isFirstSection,
+    photoCaption: activeSection.image_caption,
+    sectionTitle: activeTitle,
+  })
 
   // An edition id is required — the editor has nothing to write to without one.
   useEffect(() => {
@@ -161,6 +229,8 @@ export default function CreateTask() {
           title: draft.title,
           content: draft.content,
           status: draft.status,
+          image_url: draft.photoMode === 'none' ? null : (draft.image_url || null),
+          image_caption: draft.photoMode === 'none' ? null : (draft.image_caption || null),
         })
         setSaveState('saved')
       } catch (err) {
@@ -223,7 +293,6 @@ export default function CreateTask() {
     })
   }, [])
 
-  const editionLanguage = edition?.language || 'malayalam'
   const speechLang = editionLanguage === 'malayalam' ? 'ml-IN' : 'en-US'
   const speech = useSpeechRecognition({ lang: speechLang, onResult: handleSpeechResult })
 
@@ -254,9 +323,20 @@ export default function CreateTask() {
 
   function handleApplyVoice() {
     if (!voiceDraft.trim()) return
+    setNotice('')
     const current = sections[activeKey]?.content ?? ''
-    const merged = (current ? current + ' ' + voiceDraft.trim() : voiceDraft.trim()).slice(0, charLimit)
+    const rawMerged = current ? current + ' ' + voiceDraft.trim() : voiceDraft.trim()
+    const merged = truncateAtSentenceBoundary(
+      rawMerged,
+      charLimit,
+      editionLanguage,
+    )
+    if (!merged && rawMerged.length > charLimit) {
+      setNotice('No complete sentence fits this section. Shorten the copy or remove the photo.')
+      return
+    }
     editSection(activeKey, { content: merged })
+    if (merged.length < rawMerged.length) setNotice('Voice text was limited at a complete sentence to fit the print capacity.')
     setVoiceDraft('')
   }
 
@@ -302,16 +382,35 @@ export default function CreateTask() {
     setNotice('')
     setGenerating(true)
     try {
+      const isAiPhoto = activeSection.photoMode === 'ai'
       const result = await api.expandContent({
         summary: activeSection.content,
-        characterLimit: charLimit,
+        characterLimit: generationTargetFor(charLimit),
         language: editionLanguage,
+        includePhoto: isAiPhoto,
       })
-      editSection(activeKey, {
-        content: result.expanded_content,
-        // A generated headline only fills an empty title, never overwrites one.
-        title: activeSection.title || result.generated_title || '',
-      })
+      const expandedContent = truncateAtSentenceBoundary(
+        cleanSectionContent(result.expanded_content),
+        charLimit,
+        editionLanguage,
+      )
+      if (!expandedContent) {
+        setNotice('The generated copy has no complete sentence within this section’s print capacity.')
+        return
+      }
+      if (expandedContent.length < cleanSectionContent(result.expanded_content).length) {
+        setNotice('Generated copy was limited at a complete sentence to fit the print capacity.')
+      }
+      const generatedTitle = cleanSectionTitle(activeSection.title || result.generated_title || '', result.expanded_content)
+      const updates = {
+        content: expandedContent,
+        title: generatedTitle,
+      }
+      if (isAiPhoto && result.image_url) {
+        updates.image_url = result.image_url
+        if (result.image_caption) updates.image_caption = result.image_caption
+      }
+      editSection(activeKey, updates)
     } catch (err) {
       setNotice(err.message)
     } finally {
@@ -321,19 +420,32 @@ export default function CreateTask() {
 
   /* ------------------------------------------------------- bulk page fill */
 
-  // A section this far below its box's capacity leaves visible white space on
-  // the printed sheet.
-  const UNDERFILL_RATIO = 0.6
-
   const underFilled = useMemo(
-    () =>
-      ALL_BLOCKS.filter((candidate) => {
+    () => {
+      if (!fontMetricsReady) return []
+      return ALL_BLOCKS.filter((candidate) => {
         const section = sections[candidate.section_key]
-        if (!section?.content?.trim()) return false
-        const limit = printCapacityFor(candidate.section_key, pages) ?? candidate.charLimit
-        return section.content.length < limit * UNDERFILL_RATIO
-      }),
-    [pages, sections],
+        const contentLength = cleanSectionContent(section?.content ?? '').length
+        if (!contentLength) return false
+        const hasPhoto = Boolean(
+          (section.photoMode && section.photoMode !== 'none') || section.image_url
+        )
+        const isFirst =
+          pages.find((p) => p.page_number === candidate.page_number)?.blocks[0]?.section_key ===
+          candidate.section_key
+        const limit = effectiveCapacityFor({
+          sectionKey: candidate.section_key,
+          pages,
+          language: editionLanguage,
+          hasPhoto,
+          isFirstSection: isFirst,
+          photoCaption: section.image_caption,
+          sectionTitle: cleanSectionTitle(section?.title, section?.content),
+        })
+        return contentLength < limit * MIN_FILL_RATIO
+      })
+    },
+    [editionLanguage, fontMetricsReady, pages, sections],
   )
 
   async function handleFillAll() {
@@ -355,19 +467,88 @@ export default function CreateTask() {
 
       const key = candidate.section_key
       const current = sections[key]
-      const limit = printCapacityFor(key, pages) ?? candidate.charLimit
+      const hasPhoto = Boolean(
+        (current?.photoMode && current?.photoMode !== 'none') || current?.image_url
+      )
+      const isFirst =
+        pages.find((p) => p.page_number === candidate.page_number)?.blocks[0]?.section_key === key
+      const limit = effectiveCapacityFor({
+        sectionKey: key,
+        pages,
+        language: editionLanguage,
+        hasPhoto,
+        isFirstSection: isFirst,
+        photoCaption: current?.image_caption,
+        sectionTitle: cleanSectionTitle(current?.title, current?.content),
+      })
 
       try {
         // Sequential on purpose: 19 parallel calls invite Groq rate-limiting.
-        // Even sequentially, back-to-back calls return the occasional 502 from
-        // the upstream model, so each section gets one retry after a pause.
-        const result = await withRetry(() =>
-          api.expandContent({ summary: current.content, characterLimit: limit, language: editionLanguage }),
+        // The output-token ceiling can leave a section short after one response,
+        // so allow one paced follow-up expansion when it is still below target.
+        const isAiPhoto = current?.photoMode === 'ai'
+        const originalContent = cleanSectionContent(current.content)
+        const targetLength = Math.ceil(limit * MIN_FILL_RATIO)
+        let bestContent = originalContent
+        let firstResult = null
+        let photoResult = null
+        let wasLimited = false
+
+        for (let attempt = 0; attempt < FILL_EXPANSION_PASSES; attempt += 1) {
+          if (bestContent.length >= targetLength) break
+          const result = await withRetry(() =>
+            api.expandContent({
+              summary: bestContent,
+              characterLimit: generationTargetFor(limit),
+              language: editionLanguage,
+              includePhoto: isAiPhoto && attempt === 0,
+            }),
+          )
+          firstResult ??= result
+          if (attempt === 0) photoResult = result
+
+          const generatedContent = cleanSectionContent(result.expanded_content)
+          const fittedContent = truncateAtSentenceBoundary(generatedContent, limit, editionLanguage)
+          if (!fittedContent) {
+            if (attempt === 0 && !originalContent) {
+              throw new Error('No complete sentence fits this section’s print capacity.')
+            }
+            break
+          }
+          if (fittedContent.length <= bestContent.length) break
+
+          bestContent = fittedContent
+          wasLimited ||= fittedContent.length < generatedContent.length
+          if (bestContent.length < targetLength && attempt < FILL_EXPANSION_PASSES - 1) {
+            await wait(FILL_PACING_MS)
+          }
+        }
+
+        if (wasLimited) {
+          setNotice(`${candidate.section_name} was limited at a complete sentence to fit the print capacity.`)
+        }
+        if (bestContent.length === originalContent.length && !(isAiPhoto && photoResult?.image_url)) {
+          throw new Error('The AI did not add enough copy to fill this section.')
+        }
+
+        const generatedTitle = cleanSectionTitle(
+          current.title || firstResult?.generated_title || '',
+          bestContent,
         )
-        editSection(key, {
-          content: result.expanded_content,
-          title: current.title || result.generated_title || '',
-        })
+        const updates = {
+          content: bestContent,
+          title: generatedTitle,
+        }
+        if (isAiPhoto && photoResult?.image_url) {
+          updates.image_url = photoResult.image_url
+          if (photoResult.image_caption) updates.image_caption = photoResult.image_caption
+        }
+        editSection(key, updates)
+        if (bestContent.length < targetLength) {
+          failedFillRef.current.push(
+            `${candidate.section_name} (filled ${Math.floor((bestContent.length / (limit || 1)) * 100)}%)`,
+          )
+        }
       } catch (err) {
         // One bad section should not abandon the other eighteen.
         failedFillRef.current.push(`${candidate.section_name} (${err.message})`)
@@ -400,6 +581,86 @@ export default function CreateTask() {
       setNotice(err.message)
     } finally {
       setGenerating(false)
+    }
+  }
+
+  /* ------------------------------------------------------------- photos */
+
+  const fileInputRef = useRef(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+
+  function handleToggleAiPhoto() {
+    setNotice('')
+    if (activeSection.photoMode === 'ai') {
+      // Disabling AI photo: reset photoMode to 'none', clear active photo, restoring full base limit
+      editSection(activeKey, {
+        photoMode: 'none',
+        image_url: '',
+        image_caption: '',
+      })
+    } else {
+      // Enabling AI photo: set photoMode to 'ai' to dynamically adjust character limit
+      // Backend AI will search and attach an authentic news photo upon clicking 'Expand to fit'
+      editSection(activeKey, { photoMode: 'ai' })
+    }
+  }
+
+  async function handleFileUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setNotice('')
+    setUploadingPhoto(true)
+    try {
+      const res = await api.uploadArticleImage(file)
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
+      const caption =
+        editionLanguage === 'malayalam' ? `ചിത്രം: ${cleanName}` : `Photo: ${cleanName}`
+      editSection(activeKey, {
+        photoMode: 'upload',
+        image_url: res.image_url || res.url,
+        image_caption: caption,
+      })
+    } catch (err) {
+      setNotice(`Upload failed: ${err.message}`)
+    } finally {
+      setUploadingPhoto(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  function handleRemovePhoto() {
+    editSection(activeKey, {
+      photoMode: 'none',
+      image_url: '',
+      image_caption: '',
+    })
+  }
+
+  const pageAiPhotosActive = useMemo(() => {
+    return page?.blocks?.some((b) => sections[b.section_key]?.photoMode === 'ai') ?? false
+  }, [page, sections])
+
+  function handleTogglePageAiPhotos() {
+    setNotice('')
+    const turningOn = !pageAiPhotosActive
+
+    for (const b of page.blocks) {
+      const sec = sections[b.section_key]
+      if (turningOn) {
+        // Enable AI photos across current page sections, PRESERVING any manually uploaded photos
+        if (sec?.photoMode !== 'upload') {
+          editSection(b.section_key, { photoMode: 'ai' })
+        }
+      } else {
+        // Disable AI photos across current page sections, PRESERVING any manually uploaded photos
+        if (sec?.photoMode === 'ai') {
+          editSection(b.section_key, {
+            photoMode: 'none',
+            image_url: '',
+            image_caption: '',
+          })
+        }
+      }
     }
   }
 
@@ -596,6 +857,39 @@ export default function CreateTask() {
 
           <div className="flex items-center gap-3">
             <SaveIndicator state={saveState} />
+
+            {/* Page-level AI Photo Toggle */}
+            <button
+              type="button"
+              onClick={handleTogglePageAiPhotos}
+              title={
+                pageAiPhotosActive
+                  ? `Disable AI photos across Page ${page.page_number}`
+                  : `Enable AI photos across Page ${page.page_number}`
+              }
+              className={[
+                'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[14px] font-semibold transition shadow-2xs',
+                pageAiPhotosActive
+                  ? 'border-brand-500 bg-brand-50 text-brand-600'
+                  : 'border-line bg-white text-slate-700 hover:border-slate-300 hover:text-ink',
+              ].join(' ')}
+            >
+              <SparkleIcon className="size-4 text-brand-500" />
+              <span>Page AI Photos</span>
+              <span
+                className={[
+                  'relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
+                  pageAiPhotosActive ? 'bg-brand-500' : 'bg-slate-300',
+                ].join(' ')}
+              >
+                <span
+                  className={[
+                    'pointer-events-none inline-block size-3 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out',
+                    pageAiPhotosActive ? 'translate-x-3' : 'translate-x-0',
+                  ].join(' ')}
+                />
+              </span>
+            </button>
 
             {/* Existing copy was written against the old undersized limits, so
                 a bulk pass avoids running "Expand to fit" nineteen times. */}
@@ -811,7 +1105,8 @@ export default function CreateTask() {
                     />
                   </div>
                   <p className="mt-1.5 text-[13px] text-muted">
-                    Page {block.page_number} · {charLimit} characters fit the printed box
+                    Page {block.page_number} · about {charLimit} characters for the fixed-size PDF
+                    {hasActivePhoto ? ' (photo capacity)' : ''}
                   </p>
                 </div>
                 {activeSection.status === 'completed' && (
@@ -832,19 +1127,216 @@ export default function CreateTask() {
                 />
               </label>
 
+              {/* Optional Section Photo Module */}
+              <div className="mt-4 rounded-2xl border border-line bg-white p-3.5 sm:p-4 shadow-xs transition">
+                {/* Header: Title + Status Pill */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                      <PhotoIcon className="size-4" />
+                    </div>
+                    <span className="text-[13px] font-bold text-navy-900 truncate">
+                      Section Photo
+                    </span>
+                  </div>
+                  {hasActivePhoto ? (
+                    <span className="inline-flex shrink-0 items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 border border-brand-100">
+                      {activeSection.photoMode === 'upload' ? 'Uploaded' : 'AI Active'}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500">
+                      Optional
+                    </span>
+                  )}
+                </div>
+
+                {/* Two Action Buttons: AI Photo Toggle & Upload Photo */}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {/* AI Photo Toggle Card */}
+                  <div
+                    onClick={handleToggleAiPhoto}
+                    className={[
+                      'flex items-center justify-between rounded-xl border px-2.5 py-2 cursor-pointer transition select-none',
+                      activeSection.photoMode === 'ai'
+                        ? 'border-brand-300 bg-brand-50/80 shadow-2xs'
+                        : 'border-line bg-slate-50/60 hover:bg-slate-100/80 hover:border-slate-300',
+                    ].join(' ')}
+                    title="Toggle AI Google/News Photo search for this section"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <SparkleIcon className="size-3.5 text-brand-500 shrink-0" />
+                      <span className="text-[12px] font-semibold text-slate-800 truncate">
+                        AI Photo
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={activeSection.photoMode === 'ai'}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleToggleAiPhoto()
+                      }}
+                      className={[
+                        'relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                        activeSection.photoMode === 'ai' ? 'bg-brand-500' : 'bg-slate-300',
+                      ].join(' ')}
+                    >
+                      <span
+                        className={[
+                          'pointer-events-none inline-block size-3 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out',
+                          activeSection.photoMode === 'ai' ? 'translate-x-3' : 'translate-x-0',
+                        ].join(' ')}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Upload Photo Button */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingPhoto}
+                    title="Upload photo from your device"
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-line bg-slate-50/60 px-2.5 py-2 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-ink hover:border-slate-300 active:scale-95 disabled:opacity-60"
+                  >
+                    {uploadingPhoto ? (
+                      <RefreshCwIcon className="size-3.5 animate-spin text-slate-500 shrink-0" />
+                    ) : (
+                      <UploadIcon className="size-3.5 text-slate-500 shrink-0" />
+                    )}
+                    <span>{uploadingPhoto ? 'Uploading…' : 'Upload'}</span>
+                  </button>
+                </div>
+
+                {/* Helper notice when AI photo is enabled but no image is generated yet */}
+                {activeSection.photoMode === 'ai' && !activeSection.image_url && (
+                  <div className="mt-3 rounded-xl bg-brand-50/70 border border-brand-100 p-2.5 text-[11px] text-brand-900">
+                    <div className="flex items-center justify-between font-semibold text-brand-950">
+                      <div className="flex items-center gap-1.5">
+                        <SparkleIcon className="size-3 text-brand-600" />
+                        <span>AI Search Ready</span>
+                      </div>
+                      <span className="text-[10px] text-brand-700 bg-brand-100 px-1.5 py-0.5 rounded font-bold">
+                        -{baseCharLimit - charLimit} chars
+                      </span>
+                    </div>
+                    <p className="mt-1 text-brand-700 leading-normal">
+                      Click <strong>Expand to fit</strong> below to search and attach an authentic news photo, or upload your own.
+                    </p>
+                  </div>
+                )}
+
+                {/* Active Photo State: Thumbnail, Caption, Remove */}
+                {Boolean(activeSection.image_url) && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-2.5">
+                    <div className="flex items-center gap-3">
+                      {/* Photo Thumbnail */}
+                      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl border border-line bg-slate-100 shadow-2xs flex items-center justify-center text-slate-400">
+                        <PhotoIcon className="size-6 text-slate-300" />
+                        <img
+                          src={activeSection.image_url}
+                          alt="Section preview"
+                          className="absolute inset-0 size-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                          }}
+                        />
+                        {activeSection.photoMode === 'ai' && (
+                          <span className="absolute bottom-0 inset-x-0 bg-brand-600/90 text-[8px] font-bold text-white text-center py-0.5 tracking-wider uppercase">
+                            AI
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Caption Input with Remove in Label Row */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-semibold text-muted uppercase tracking-wider">
+                            Caption / Credit
+                          </label>
+                          <div className="flex items-center gap-2">
+                            {activeSection.photoMode === 'ai' && (
+                              <button
+                                type="button"
+                                onClick={handleExpand}
+                                disabled={generating || !fontMetricsReady}
+                                title="Regenerate photo via AI"
+                                className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-600 hover:text-brand-700 transition disabled:opacity-50"
+                              >
+                                <SparkleIcon className="size-3 text-brand-500" />
+                                <span>Refetch</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={handleRemovePhoto}
+                              title="Remove photo and restore character capacity"
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-red-600 hover:text-red-700 transition"
+                            >
+                              <TrashIcon className="size-3" />
+                              <span>Remove</span>
+                            </button>
+                          </div>
+                        </div>
+                        <input
+                          value={activeSection.image_caption || ''}
+                          onChange={(e) =>
+                            editSection(activeKey, { image_caption: e.target.value })
+                          }
+                          placeholder="e.g., Photo: Staff Reporter"
+                          className="mt-1 w-full rounded-lg border border-line bg-slate-50/50 px-2.5 py-1.5 text-[13px] text-ink outline-none transition focus:border-brand-500 focus:bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Live Capacity Indicator */}
+                    <div className="flex items-center justify-between rounded-lg bg-brand-50/70 px-2.5 py-1.5 text-[11px] text-brand-900 border border-brand-100/60">
+                      <span className="font-semibold text-brand-950">
+                        Capacity: {charLimit} chars
+                      </span>
+                      <span className="font-medium text-brand-700">
+                        -{baseCharLimit - charLimit} chars for layout
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Unified Body Text & Voice Dictation Input */}
               <div className="mt-5 rounded-2xl border border-line bg-white p-4 transition-all focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/10 shadow-xs">
                 {/* Textarea for typing */}
                 <textarea
                   value={activeSection.content}
                   onChange={(e) =>
-                    editSection(activeKey, { content: e.target.value.slice(0, charLimit) })
+                    editSection(activeKey, { content: e.target.value })
                   }
+                  onBlur={(e) => {
+                    if (e.target.value.length <= charLimit) return
+                    const fitted = truncateAtSentenceBoundary(e.target.value, charLimit, editionLanguage)
+                    if (fitted) {
+                      editSection(activeKey, { content: fitted })
+                      setNotice('Text was limited at a complete sentence to fit the print capacity.')
+                    }
+                    else setNotice('No complete sentence fits this section. Shorten the copy or remove the photo.')
+                  }}
                   placeholder="Type section body, or record voice below..."
                   rows={8}
                   aria-label={'Body text for ' + activeName}
                   className="scroll-subtle h-[200px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
                 />
+                {activeSection.content.length > charLimit && (
+                  <p className="mt-2 text-[11px] leading-relaxed text-amber-700">
+                    This copy exceeds the estimated print capacity. On leaving the field, trailing
+                    text is kept only through a complete sentence; the PDF checks the actual layout.
+                  </p>
+                )}
 
                 {/* --- 1. ACTIVE RECORDING STATE --- */}
                 {speech.listening && (
@@ -994,7 +1486,7 @@ export default function CreateTask() {
                 <button
                   type="button"
                   onClick={handleExpand}
-                  disabled={generating || !activeSection.content.trim()}
+                  disabled={generating || !fontMetricsReady || !activeSection.content.trim()}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
                 >
                   <SparkleIcon className="size-5" />

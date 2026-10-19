@@ -25,23 +25,23 @@ export default function EditionCard({ edition, completed = 0, layout = 'grid', o
   return (
     <article
       className={[
-        'group rounded-2xl border border-line bg-white p-5 transition hover:border-brand-100 hover:shadow-[0_8px_28px_-18px_rgba(15,32,68,0.35)]',
-        isList ? 'flex items-center gap-6' : 'flex flex-col',
+        'group rounded-2xl border border-line bg-white p-4 sm:p-4.5 transition hover:border-brand-200 hover:shadow-[0_8px_28px_-18px_rgba(15,32,68,0.25)]',
+        isList ? 'flex items-center gap-6' : 'flex flex-col justify-between',
       ].join(' ')}
     >
-      <div className={isList ? 'flex flex-1 items-start gap-5' : 'flex items-start gap-5'}>
+      <div className={isList ? 'flex flex-1 items-start gap-4 sm:gap-5' : 'flex items-start gap-3.5 sm:gap-4'}>
         <NewspaperThumb
           masthead={edition.newspaper_name}
           art={artFor(edition.id)}
-          className={isList ? 'h-24 w-[68px] shrink-0' : 'h-[132px] w-[100px] shrink-0'}
+          className={isList ? 'h-24 w-[68px] shrink-0' : 'h-[120px] w-[90px] shrink-0'}
         />
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-brand-500">{edition.edition_label}</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-[13px] font-semibold text-brand-600 truncate">{edition.edition_label}</span>
               {edition.language && (
-                <span className="rounded-md bg-canvas px-2 py-0.5 text-[11px] font-semibold capitalize text-muted border border-line">
+                <span className="shrink-0 rounded-md bg-canvas px-1.5 py-0.5 text-[10px] font-semibold capitalize text-muted border border-line">
                   {edition.language}
                 </span>
               )}
@@ -51,30 +51,35 @@ export default function EditionCard({ edition, completed = 0, layout = 'grid', o
               onClick={() => onDelete?.(edition)}
               aria-label={`Delete ${edition.newspaper_name}`}
               title="Delete edition"
-              className="-mr-1 -mt-1 rounded-lg p-1 text-muted transition hover:bg-red-50 hover:text-red-600"
+              className="-mr-1 -mt-1 rounded-lg p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
             >
-              <TrashIcon className="size-5" />
+              <TrashIcon className="size-4" />
             </button>
           </div>
 
-          <h3 className="mt-2 text-[19px] leading-snug font-bold text-ink">
-            <button type="button" onClick={() => onOpen?.(edition)} className="text-left hover:text-brand-600">
+          <h3 className="mt-1 text-[17px] leading-snug font-bold text-ink">
+            <button
+              type="button"
+              onClick={() => onOpen?.(edition)}
+              className="text-left line-clamp-1 transition hover:text-brand-600"
+              title={edition.newspaper_name}
+            >
               {edition.newspaper_name}
             </button>
           </h3>
 
-          <p className="mt-2 inline-flex items-center gap-2 text-[15px] text-muted">
-            <CalendarIcon className="size-4" />
-            {formatDate(edition.date)}
+          <p className="mt-1.5 inline-flex items-center gap-1.5 text-[13px] text-muted">
+            <CalendarIcon className="size-3.5 shrink-0" />
+            <span className="whitespace-nowrap">{formatDate(edition.date)}</span>
           </p>
 
           {/* Progress toward the 19 sections /validate requires before print. */}
-          <div className="mt-3">
-            <div className="flex items-center justify-between text-[13px] text-muted">
-              <span>
+          <div className="mt-2.5">
+            <div className="flex items-center justify-between text-[12px] text-muted">
+              <span className="whitespace-nowrap">
                 {completed} of {TOTAL_SECTIONS} sections
               </span>
-              <span className="tabular-nums">{percent}%</span>
+              <span className="font-semibold tabular-nums text-slate-700">{percent}%</span>
             </div>
             <div
               role="progressbar"
@@ -85,7 +90,7 @@ export default function EditionCard({ edition, completed = 0, layout = 'grid', o
               className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-navy-50"
             >
               <div
-                className={`h-full rounded-full ${percent === 100 ? 'bg-emerald-500' : 'bg-brand-500'}`}
+                className={`h-full rounded-full transition-all duration-300 ${percent === 100 ? 'bg-emerald-500' : 'bg-brand-500'}`}
                 style={{ width: `${percent}%` }}
               />
             </div>
@@ -95,30 +100,30 @@ export default function EditionCard({ edition, completed = 0, layout = 'grid', o
 
       <div
         className={[
-          'flex items-center justify-between gap-4',
-          isList ? 'w-[280px] shrink-0' : 'mt-5 border-t border-line pt-4',
+          'flex items-center justify-between gap-2',
+          isList ? 'w-[280px] shrink-0' : 'mt-4 border-t border-line pt-3.5',
         ].join(' ')}
       >
         <StatusBadge status={edition.status} />
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 shrink-0">
           {/* Offered once every section is done, so a finished edition can go
               straight to print without reopening the editor. */}
           {completed === TOTAL_SECTIONS && (
             <Link
               to={`/print?edition=${edition.id}`}
-              className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 transition hover:text-emerald-600"
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-700 transition hover:text-emerald-800 whitespace-nowrap"
             >
-              <PrinterIcon className="size-4" />
-              Print
+              <PrinterIcon className="size-3.5 shrink-0" />
+              <span>Print</span>
             </Link>
           )}
           <button
             type="button"
             onClick={() => onOpen?.(edition)}
-            className="inline-flex items-center gap-2 text-sm font-semibold text-brand-600 transition hover:text-brand-500"
+            className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-600 transition hover:text-brand-700 whitespace-nowrap"
           >
-            Open editor
-            <ArrowRightIcon className="size-4" />
+            <span>Open editor</span>
+            <ArrowRightIcon className="size-3.5 shrink-0" />
           </button>
         </div>
       </div>
