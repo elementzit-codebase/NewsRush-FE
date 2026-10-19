@@ -233,6 +233,15 @@ export function uploadProfilePicture(file) {
 export const removeProfilePicture = () =>
   request('/api/users/me/profile-pic', { method: 'DELETE' })
 
+/* --------------------------------------------------------------- uploads */
+
+/** POST /api/uploads/image — JPEG, PNG, WebP or GIF, up to 10 MB. Returns { image_url, url } */
+export function uploadArticleImage(file) {
+  const form = new FormData()
+  form.append('file', file)
+  return request('/api/uploads/image', { method: 'POST', body: form, isForm: true })
+}
+
 /* -------------------------------------------------------------- editions */
 
 /** GET /api/editions — only the signed-in user's editions, newest date first. */

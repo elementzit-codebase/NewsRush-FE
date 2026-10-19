@@ -84,6 +84,7 @@ function NewspaperCanvas({
             active={activeKey === block.section_key}
             onSelect={onSelectSection}
             isFirstSection={idx === 0}
+            language={language}
           />
         ))}
       </div>
@@ -96,7 +97,7 @@ function NewspaperCanvas({
   )
 }
 
-function Block({ block, section, active, onSelect, isFirstSection }) {
+function Block({ block, section, active, onSelect, isFirstSection, language = 'english' }) {
   const content = cleanSectionContent(section?.content ?? '')
   const title = cleanSectionTitle(section?.title, section?.content)
 
@@ -117,7 +118,7 @@ function Block({ block, section, active, onSelect, isFirstSection }) {
 
   // Split lead story copy between left columns and underneath the right photo
   const { leftText, rightText } = isFirstSection && hasPhoto
-    ? splitLeadStoryText(content, block.span)
+    ? splitLeadStoryText(content, block.span, null, null, language)
     : { leftText: content, rightText: '' }
 
   // "View more" should only appear when there is actually more to see, which
@@ -188,9 +189,19 @@ function Block({ block, section, active, onSelect, isFirstSection }) {
                     ref={bodyRef}
                     className={[
                       BODY_CLASS,
-                      'scroll-subtle mt-0 overflow-y-auto whitespace-pre-wrap',
-                      expanded ? '' : (COLLAPSED_BODY[block.size] ?? COLLAPSED_BODY.small),
+                      'mt-0 overflow-hidden whitespace-pre-wrap',
+                      expanded ? '' : 'max-h-[340px] sm:max-h-[380px]',
                     ].join(' ')}
+                    style={
+                      overflowing && !expanded
+                        ? {
+                            WebkitMaskImage:
+                              'linear-gradient(to bottom, black 80%, transparent 100%)',
+                            maskImage:
+                              'linear-gradient(to bottom, black 80%, transparent 100%)',
+                          }
+                        : undefined
+                    }
                   >
                     {leftText}
                   </div>
@@ -210,7 +221,22 @@ function Block({ block, section, active, onSelect, isFirstSection }) {
                       </span>
                     )}
                     {rightText && (
-                      <div className="mt-1.5 text-[12px] leading-relaxed text-slate-600 overflow-hidden">
+                      <div
+                        className={[
+                          'mt-1.5 text-[13px] leading-relaxed text-slate-600 overflow-hidden whitespace-pre-wrap',
+                          expanded ? '' : 'max-h-[190px] sm:max-h-[230px]',
+                        ].join(' ')}
+                        style={
+                          overflowing && !expanded
+                            ? {
+                                WebkitMaskImage:
+                                  'linear-gradient(to bottom, black 80%, transparent 100%)',
+                                maskImage:
+                                  'linear-gradient(to bottom, black 80%, transparent 100%)',
+                              }
+                            : undefined
+                        }
+                      >
                         {rightText}
                       </div>
                     )}
@@ -235,9 +261,19 @@ function Block({ block, section, active, onSelect, isFirstSection }) {
                     ref={bodyRef}
                     className={[
                       BODY_CLASS,
-                      'scroll-subtle overflow-y-auto whitespace-pre-wrap',
+                      'overflow-hidden whitespace-pre-wrap',
                       expanded ? '' : (COLLAPSED_BODY[block.size] ?? COLLAPSED_BODY.small),
                     ].join(' ')}
+                    style={
+                      overflowing && !expanded
+                        ? {
+                            WebkitMaskImage:
+                              'linear-gradient(to bottom, black 80%, transparent 100%)',
+                            maskImage:
+                              'linear-gradient(to bottom, black 80%, transparent 100%)',
+                          }
+                        : undefined
+                    }
                   >
                     {content}
                   </div>
@@ -265,9 +301,19 @@ function Block({ block, section, active, onSelect, isFirstSection }) {
                 ref={bodyRef}
                 className={[
                   BODY_CLASS,
-                  'scroll-subtle overflow-y-auto whitespace-pre-wrap',
+                  'overflow-hidden whitespace-pre-wrap',
                   expanded ? '' : (COLLAPSED_BODY[block.size] ?? COLLAPSED_BODY.small),
                 ].join(' ')}
+                style={
+                  overflowing && !expanded
+                    ? {
+                        WebkitMaskImage:
+                          'linear-gradient(to bottom, black 80%, transparent 100%)',
+                        maskImage:
+                          'linear-gradient(to bottom, black 80%, transparent 100%)',
+                      }
+                    : undefined
+                }
               >
                 {content}
               </div>
@@ -280,9 +326,19 @@ function Block({ block, section, active, onSelect, isFirstSection }) {
               ref={bodyRef}
               className={[
                 BODY_CLASS,
-                'scroll-subtle w-full overflow-y-auto whitespace-pre-wrap',
+                'w-full overflow-hidden whitespace-pre-wrap',
                 expanded ? '' : (COLLAPSED_BODY[block.size] ?? COLLAPSED_BODY.small),
               ].join(' ')}
+              style={
+                overflowing && !expanded
+                  ? {
+                      WebkitMaskImage:
+                        'linear-gradient(to bottom, black 80%, transparent 100%)',
+                      maskImage:
+                        'linear-gradient(to bottom, black 80%, transparent 100%)',
+                    }
+                  : undefined
+              }
             >
               {content}
             </div>

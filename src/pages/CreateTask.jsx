@@ -12,6 +12,7 @@ import {
   PencilIcon,
   PhotoIcon,
   PrinterIcon,
+  RefreshCwIcon,
   SparkleIcon,
   StopIcon,
   TrashIcon,
@@ -33,15 +34,6 @@ import { cleanSectionContent, cleanSectionTitle } from '../lib/contentSanitizer'
 import { buildPage, buildPages, templatesForPage } from '../data/templates'
 import { readTemplates, writeTemplate } from '../lib/templateStore'
 
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = () => reject(new Error('Failed to read image file'))
-    reader.readAsDataURL(file)
-  })
-}
-
 const AUTOSAVE_MS = 2000
 
 /** Builds the local map the editor edits, seeded from whatever the server has. */
@@ -59,7 +51,7 @@ function toSectionMap(saved = []) {
       image_url: section.image_url ?? '',
       image_caption: section.image_caption ?? '',
       photoMode: hasImg
-        ? (section.image_url.startsWith('data:') || section.image_url.startsWith('blob:') ? 'upload' : 'ai')
+        ? (section.image_url.startsWith('/uploads/') || section.image_url.startsWith('data:') || section.image_url.startsWith('blob:') ? 'upload' : 'ai')
         : 'none',
     }
   }
@@ -595,6 +587,7 @@ export default function CreateTask() {
   /* ------------------------------------------------------------- photos */
 
   const fileInputRef = useRef(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   function handleToggleAiPhoto() {
     setNotice('')
@@ -616,19 +609,21 @@ export default function CreateTask() {
     const file = e.target.files?.[0]
     if (!file) return
     setNotice('')
+    setUploadingPhoto(true)
     try {
-      const dataUrl = await readFileAsDataUrl(file)
+      const res = await api.uploadArticleImage(file)
       const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
       const caption =
         editionLanguage === 'malayalam' ? `ചിത്രം: ${cleanName}` : `Photo: ${cleanName}`
       editSection(activeKey, {
         photoMode: 'upload',
-        image_url: dataUrl,
+        image_url: res.image_url || res.url,
         image_caption: caption,
       })
     } catch (err) {
       setNotice(`Upload failed: ${err.message}`)
     } finally {
+      setUploadingPhoto(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
@@ -1207,11 +1202,16 @@ export default function CreateTask() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingPhoto}
                     title="Upload photo from your device"
-                    className="flex items-center justify-center gap-1.5 rounded-xl border border-line bg-slate-50/60 px-2.5 py-2 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-ink hover:border-slate-300 active:scale-95"
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-line bg-slate-50/60 px-2.5 py-2 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-ink hover:border-slate-300 active:scale-95 disabled:opacity-60"
                   >
-                    <UploadIcon className="size-3.5 text-slate-500 shrink-0" />
-                    <span>Upload</span>
+                    {uploadingPhoto ? (
+                      <RefreshCwIcon className="size-3.5 animate-spin text-slate-500 shrink-0" />
+                    ) : (
+                      <UploadIcon className="size-3.5 text-slate-500 shrink-0" />
+                    )}
+                    <span>{uploadingPhoto ? 'Uploading…' : 'Upload'}</span>
                   </button>
                 </div>
 
@@ -1234,15 +1234,19 @@ export default function CreateTask() {
                 )}
 
                 {/* Active Photo State: Thumbnail, Caption, Remove */}
-                {hasActivePhoto && (
+                {Boolean(activeSection.image_url) && (
                   <div className="mt-3 pt-3 border-t border-slate-100 space-y-2.5">
                     <div className="flex items-center gap-3">
                       {/* Photo Thumbnail */}
-                      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl border border-line bg-slate-100 shadow-2xs">
+                      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl border border-line bg-slate-100 shadow-2xs flex items-center justify-center text-slate-400">
+                        <PhotoIcon className="size-6 text-slate-300" />
                         <img
                           src={activeSection.image_url}
                           alt="Section preview"
-                          className="size-full object-cover"
+                          className="absolute inset-0 size-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                          }}
                         />
                         {activeSection.photoMode === 'ai' && (
                           <span className="absolute bottom-0 inset-x-0 bg-brand-600/90 text-[8px] font-bold text-white text-center py-0.5 tracking-wider uppercase">
