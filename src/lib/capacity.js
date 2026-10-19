@@ -498,26 +498,46 @@ export function splitLeadStoryText(
 
   if (Number.isFinite(leftCharLimit) && leftCharLimit > 0) {
     const sentenceEnds = sentenceEndOffsets(trimmed, language)
-    const limit = Math.max(0, Math.min(trimmed.length, leftCharLimit))
-    let splitIndex = sentenceEnds.filter((offset) => offset <= limit).at(-1)
+    const leftCapacity = Math.max(0, Math.min(trimmed.length, leftCharLimit))
+    // Spread the available copy over both text areas according to their
+    // printable area. The left columns still have a hard capacity, but filling
+    // them completely before starting the text below the photo leaves that
+    // second area blank for shorter stories.
+    const balancedTarget = Math.min(
+      leftCapacity,
+      Math.round(trimmed.length * Math.max(0, Math.min(1, ratio))),
+    )
+    let splitIndex = sentenceEnds.filter((offset) => offset <= balancedTarget).at(-1)
+    const beforeTarget = [...trimmed.slice(0, balancedTarget).matchAll(/\s/gu)].at(-1)
+    const wordSplitIndex = beforeTarget ? beforeTarget.index + beforeTarget[0].length : 0
+
+    // If the previous sentence ends far before the area-balanced point, split
+    // at a word boundary near the target so the left and right text areas stay
+    // filled in proportion to their available space.
+    const sentenceGapTolerance = Math.max(24, Math.floor(balancedTarget * 0.025))
+    if (
+      wordSplitIndex &&
+      (!splitIndex || wordSplitIndex - splitIndex > sentenceGapTolerance)
+    ) {
+      splitIndex = wordSplitIndex
+    }
 
     // A long first sentence must not force the entire story into the full-height
     // columns. Continue that sentence below the photo at a safe text boundary.
     if (!splitIndex) {
-      const beforeLimit = [...trimmed.slice(0, limit).matchAll(/\s/gu)].at(-1)
-      if (beforeLimit) {
-        splitIndex = beforeLimit.index + beforeLimit[0].length
+      if (beforeTarget) {
+        splitIndex = beforeTarget.index + beforeTarget[0].length
       } else {
-        const afterLimit = trimmed.slice(limit).match(/\s/u)
+        const afterLimit = trimmed.slice(balancedTarget).match(/\s/u)
         if (afterLimit) {
-          splitIndex = limit + afterLimit.index + afterLimit[0].length
+          splitIndex = balancedTarget + afterLimit.index + afterLimit[0].length
         } else if (typeof Intl.Segmenter === 'function') {
           try {
             const locale = language === 'malayalam' ? 'ml' : 'en'
             const segmenter = new Intl.Segmenter(locale, { granularity: 'grapheme' })
             for (const part of segmenter.segment(trimmed)) {
               const end = part.index + part.segment.length
-              if (end > limit) break
+              if (end > balancedTarget) break
               splitIndex = end
             }
           } catch {
