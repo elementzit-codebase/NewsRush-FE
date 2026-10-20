@@ -5,6 +5,7 @@ import Sidebar from '../components/Sidebar'
 import TemplateThumb from '../components/TemplateThumb'
 import Waveform from '../components/Waveform'
 import {
+  AlertTriangleIcon,
   ArrowRightIcon,
   CheckIcon,
   ChevronDownIcon,
@@ -35,6 +36,12 @@ import {
 import { cleanSectionContent, cleanSectionTitle } from '../lib/contentSanitizer'
 import { buildPage, buildPages, templatesForPage } from '../data/templates'
 import { readTemplates, writeTemplate } from '../lib/templateStore'
+import {
+  ARTICLE_IMAGE_ACCEPT,
+  formatImageUploadError,
+  SUPPORTED_FORMATS_LABEL,
+  validateArticleImageFile,
+} from '../lib/imageValidation'
 
 const AUTOSAVE_MS = 2000
 
@@ -110,19 +117,51 @@ export default function CreateTask() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [photoError, setPhotoError] = useState('')
   const [saveState, setSaveState] = useState('idle') // idle | saving | saved | error
   const [generating, setGenerating] = useState(false)
   const [validation, setValidation] = useState(null)
   const [fill, setFill] = useState({ running: false, done: 0, total: 0, failed: [] })
-  const [mobileEditorOpen, setMobileEditorOpen] = useState(false)
+  const [mobileEditorMounted, setMobileEditorMounted] = useState(false)
+  const [mobileEditorVisible, setMobileEditorVisible] = useState(false)
   const [mobileTemplateOpen, setMobileTemplateOpen] = useState(false)
+  const [dragOffset, setDragOffset] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+  const touchStartY = useRef(0)
+  const closeTimerRef = useRef(null)
+
+  const openMobileEditor = useCallback(() => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    setDragOffset(0)
+    setMobileEditorMounted(true)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setMobileEditorVisible(true)
+      })
+    })
+  }, [])
+
+  const closeMobileEditor = useCallback(() => {
+    setMobileEditorVisible(false)
+    setDragOffset(0)
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = setTimeout(() => {
+      setMobileEditorMounted(false)
+    }, 320)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    }
+  }, [])
 
   // Prevent background scrolling and handle Escape key when mobile bottom sheet is open
   useEffect(() => {
-    if (mobileEditorOpen) {
+    if (mobileEditorMounted) {
       document.body.style.overflow = 'hidden'
       const handleKeyDown = (e) => {
-        if (e.key === 'Escape') setMobileEditorOpen(false)
+        if (e.key === 'Escape') closeMobileEditor()
       }
       window.addEventListener('keydown', handleKeyDown)
       return () => {
@@ -130,7 +169,29 @@ export default function CreateTask() {
         window.removeEventListener('keydown', handleKeyDown)
       }
     }
-  }, [mobileEditorOpen])
+  }, [mobileEditorMounted, closeMobileEditor])
+
+  const handleTouchStart = (e) => {
+    touchStartY.current = e.touches[0].clientY
+    setIsDragging(true)
+  }
+
+  const handleTouchMove = (e) => {
+    if (!isDragging) return
+    const diff = e.touches[0].clientY - touchStartY.current
+    if (diff > 0) {
+      setDragOffset(diff)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setIsDragging(false)
+    if (dragOffset > 90) {
+      closeMobileEditor()
+    } else {
+      setDragOffset(0)
+    }
+  }
 
   useEffect(() => {
     if (typeof document === 'undefined' || !document.fonts || fontMetricsReady) return undefined
@@ -374,11 +435,12 @@ export default function CreateTask() {
       setVoiceDraft('')
       setActiveKey(sectionKey)
       setNotice('')
+      setPhotoError('')
       if (typeof window !== 'undefined' && window.innerWidth < 1280) {
-        setMobileEditorOpen(true)
+        openMobileEditor()
       }
     },
-    [flush, activeKey, speech],
+    [flush, activeKey, speech, openMobileEditor],
   )
 
   function selectPage(index) {
@@ -389,6 +451,7 @@ export default function CreateTask() {
     setPageIndex(index)
     setActiveKey(pages[index].blocks[0].section_key)
     setNotice('')
+    setPhotoError('')
   }
 
   /**
@@ -627,6 +690,7 @@ export default function CreateTask() {
 
   function handleToggleAiPhoto() {
     setNotice('')
+    setPhotoError('')
     if (activeSection.photoMode === 'ai') {
       // Disabling AI photo: reset photoMode to 'none', clear active photo, restoring full base limit
       editSection(activeKey, {
@@ -645,6 +709,16 @@ export default function CreateTask() {
     const file = e.target.files?.[0]
     if (!file) return
     setNotice('')
+    setPhotoError('')
+
+    const validation = validateArticleImageFile(file)
+    if (!validation.valid) {
+      setPhotoError(validation.message)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (mobileFileInputRef.current) mobileFileInputRef.current.value = ''
+      return
+    }
+
     setUploadingPhoto(true)
     try {
       const res = await api.uploadArticleImage(file)
@@ -656,8 +730,10 @@ export default function CreateTask() {
         image_url: res.image_url || res.url,
         image_caption: caption,
       })
+      setPhotoError('')
     } catch (err) {
-      setNotice(`Upload failed: ${err.message}`)
+      const friendlyMessage = formatImageUploadError(err.message)
+      setPhotoError(friendlyMessage)
     } finally {
       setUploadingPhoto(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -666,6 +742,7 @@ export default function CreateTask() {
   }
 
   function handleRemovePhoto() {
+    setPhotoError('')
     editSection(activeKey, {
       photoMode: 'none',
       image_url: '',
@@ -886,14 +963,17 @@ export default function CreateTask() {
               type="file"
               ref={currentFileInputRef}
               onChange={handleFileUpload}
-              accept="image/*"
+              accept={ARTICLE_IMAGE_ACCEPT}
               className="hidden"
             />
             <button
               type="button"
-              onClick={() => currentFileInputRef.current?.click()}
+              onClick={() => {
+                setPhotoError('')
+                currentFileInputRef.current?.click()
+              }}
               disabled={uploadingPhoto}
-              title="Upload photo from your device"
+              title={`Upload photo from your device (${SUPPORTED_FORMATS_LABEL}, max 10 MB)`}
               className="flex items-center justify-center gap-1.5 rounded-xl border border-line bg-slate-50/60 px-2.5 py-2 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-ink hover:border-slate-300 active:scale-95 disabled:opacity-60"
             >
               {uploadingPhoto ? (
@@ -904,6 +984,34 @@ export default function CreateTask() {
               <span>{uploadingPhoto ? 'Uploading…' : 'Upload'}</span>
             </button>
           </div>
+
+          {/* Supported formats hint */}
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Supports {SUPPORTED_FORMATS_LABEL}</span>
+            <span>Max 10 MB</span>
+          </div>
+
+          {/* Photo Error / Validation alert */}
+          {photoError && (
+            <div
+              role="alert"
+              className="mt-2.5 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50/95 p-2.5 text-[12px] text-rose-800"
+            >
+              <AlertTriangleIcon className="size-4 shrink-0 text-rose-600 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-rose-950">Unsupported or Invalid Image</p>
+                <p className="mt-0.5 text-rose-800 leading-snug">{photoError}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPhotoError('')}
+                aria-label="Dismiss error"
+                className="shrink-0 text-rose-500 hover:text-rose-800 p-0.5 rounded transition"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Helper notice when AI photo is enabled but no image is generated yet */}
           {activeSection.photoMode === 'ai' && !activeSection.image_url && (
@@ -1161,7 +1269,7 @@ export default function CreateTask() {
           )}
         </div>
 
-        {(speech.error || mic.error || notice) && (
+        {(speech.error || mic.error || (!photoError && notice)) && (
           <p role="alert" className="mt-3 rounded-lg bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
             {speech.error || mic.error || notice}
           </p>
@@ -1724,7 +1832,7 @@ export default function CreateTask() {
           </div>
 
           {/* Mobile Bottom Sheet Drawer (< xl) */}
-          {mobileEditorOpen && (
+          {mobileEditorMounted && (
             <div
               className="fixed inset-0 z-50 xl:hidden"
               role="dialog"
@@ -1733,32 +1841,56 @@ export default function CreateTask() {
             >
               {/* Backdrop */}
               <div
-                className="fixed inset-0 bg-navy-950/40 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
-                onClick={() => setMobileEditorOpen(false)}
+                className={[
+                  'fixed inset-0 bg-navy-950/45 backdrop-blur-xs transition-opacity duration-300 ease-out',
+                  mobileEditorVisible && dragOffset === 0 ? 'opacity-100' : 'opacity-0 pointer-events-none',
+                ].join(' ')}
+                onClick={closeMobileEditor}
               />
 
               {/* Bottom Sheet Card */}
-              <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[90vh] w-full max-w-2xl mx-auto flex-col rounded-t-[28px] border-t border-line bg-white shadow-2xl transition-transform duration-300 ease-out animate-in slide-in-from-bottom">
-                {/* Drag handle pill */}
-                <div className="mx-auto mt-2.5 h-1.5 w-12 rounded-full bg-slate-300" />
+              <div
+                style={{
+                  transform:
+                    dragOffset > 0
+                      ? `translateY(${dragOffset}px)`
+                      : mobileEditorVisible
+                        ? 'translateY(0)'
+                        : 'translateY(100%)',
+                  transition: isDragging
+                    ? 'none'
+                    : 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+                className="fixed inset-x-0 bottom-0 z-50 flex max-h-[90vh] w-full max-w-2xl mx-auto flex-col rounded-t-[28px] border-t border-line bg-white shadow-2xl will-change-transform"
+              >
+                {/* Drag handle header area for touch gesture */}
+                <div
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  className="cursor-grab active:cursor-grabbing select-none"
+                >
+                  {/* Drag handle pill */}
+                  <div className="mx-auto mt-2.5 h-1.5 w-12 rounded-full bg-slate-300 transition-colors hover:bg-slate-400" />
 
-                {/* Sheet Header */}
-                <div className="flex items-center justify-between border-b border-line/70 px-5 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="size-2 rounded-full bg-brand-500" />
-                    <span className="text-[12px] font-bold uppercase tracking-wider text-slate-700">
-                      Editing Section
-                    </span>
-                    <SaveIndicator state={saveState} />
+                  {/* Sheet Header */}
+                  <div className="flex items-center justify-between border-b border-line/70 px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="size-2 rounded-full bg-brand-500" />
+                      <span className="text-[12px] font-bold uppercase tracking-wider text-slate-700">
+                        Editing Section
+                      </span>
+                      <SaveIndicator state={saveState} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeMobileEditor}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3.5 py-1 text-[13px] font-bold text-navy-900 transition hover:bg-slate-200 active:scale-95"
+                    >
+                      <span>Done</span>
+                      <CheckIcon className="size-3.5 text-brand-600" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setMobileEditorOpen(false)}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3.5 py-1 text-[13px] font-bold text-navy-900 transition hover:bg-slate-200 active:scale-95"
-                  >
-                    <span>Done</span>
-                    <CheckIcon className="size-3.5 text-brand-600" />
-                  </button>
                 </div>
 
                 {/* Sheet Body */}

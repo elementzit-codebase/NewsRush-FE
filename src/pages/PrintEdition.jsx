@@ -1,8 +1,8 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowRightIcon, CheckIcon } from '../components/Icons'
+import { ArrowRightIcon, CheckIcon, ChevronLeftIcon, PrinterIcon, ZoomInIcon, ZoomOutIcon } from '../components/Icons'
 import { TOTAL_SECTIONS } from '../data/sections'
-import { COLUMNS, GRID_GAP, SHEET, SHEET_PADDING, TYPE, rowHeight } from '../data/printGeometry'
+import { COLUMNS, GRID_GAP, SHEET, SHEET_PADDING, TYPE, mmToPx, rowHeight } from '../data/printGeometry'
 import {
   effectiveCapacityFor,
   getLeadStoryLeftRatio,
@@ -148,6 +148,77 @@ export default function PrintEdition() {
 
   // Holds the fixed-size sheets while their actual copy is measured.
   const sheetsRef = useRef(null)
+
+  const naturalWidth = mmToPx(SHEET.width)
+  const naturalHeight = mmToPx(SHEET.height)
+
+  const [containerWidth, setContainerWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1200,
+  )
+  const [zoomMode, setZoomMode] = useState('fit')
+  const [customScale, setCustomScale] = useState(1)
+  const [activePage, setActivePage] = useState(1)
+
+  useLayoutEffect(() => {
+    const el = sheetsRef.current
+    if (!el) return undefined
+    const update = () => {
+      setContainerWidth(el.clientWidth)
+    }
+    update()
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(entry.contentRect.width)
+        }
+      }
+    })
+    ro.observe(el)
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
+  const fitScale = useMemo(() => {
+    const horizontalPadding = containerWidth < 640 ? 16 : 32
+    const availableWidth = Math.max(260, containerWidth - horizontalPadding)
+    const maxFit = containerWidth > 1400 ? 0.85 : 1
+    return Math.min(maxFit, availableWidth / naturalWidth)
+  }, [containerWidth, naturalWidth])
+
+  const currentScale = useMemo(() => {
+    if (zoomMode === '100') return 1
+    if (zoomMode === 'fit') return fitScale
+    return customScale
+  }, [zoomMode, fitScale, customScale])
+
+  const handleZoomFit = () => setZoomMode('fit')
+  const handleZoom100 = () => setZoomMode('100')
+  const handleZoomIn = () => {
+    setZoomMode('custom')
+    setCustomScale((prev) => {
+      const base = zoomMode === 'fit' ? fitScale : zoomMode === '100' ? 1 : prev
+      return Math.min(1.5, Math.round((base + 0.1) * 10) / 10)
+    })
+  }
+  const handleZoomOut = () => {
+    setZoomMode('custom')
+    setCustomScale((prev) => {
+      const base = zoomMode === 'fit' ? fitScale : zoomMode === '100' ? 1 : prev
+      return Math.max(0.25, Math.round((base - 0.1) * 10) / 10)
+    })
+  }
+
+  const scrollToPage = (pageNum) => {
+    setActivePage(pageNum)
+    const el = document.getElementById(`sheet-page-${pageNum}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
 
   // The browser's "Save as PDF" dialog seeds its filename from document.title.
   // Setting it for the whole time this page is mounted means both the Print
@@ -373,144 +444,293 @@ export default function PrintEdition() {
   return (
     <div className="min-h-screen bg-canvas print:bg-white">
       {/* Toolbar. `no-print` keeps it out of the printed sheets. */}
-      <header className="no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b border-line bg-white px-8 py-5">
-        <div>
-          <nav aria-label="Breadcrumb" className="text-[14px] text-muted">
-            <Link to="/" className="hover:text-ink">
-              Workspace
-            </Link>
-            <span className="px-2 text-slate-300">/</span>
-            <Link to={`/create?edition=${editionId}`} className="hover:text-ink">
-              {edition?.newspaper_name}
-            </Link>
-            <span className="px-2 text-slate-300">/</span>
-            <span className="text-ink">Print</span>
-          </nav>
-          <p className="mt-1 text-[15px] text-muted">
-            Tabloid, 289 × 380 mm · 4 pages · choose “Save as PDF” in the print dialog.
-          </p>
-        </div>
+      <header className="no-print sticky top-0 z-20 border-b border-line bg-white/95 backdrop-blur-md px-3.5 py-2.5 sm:px-6 sm:py-3.5 md:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:gap-2.5">
+          {/* Main Bar */}
+          <div className="flex items-center justify-between gap-2.5">
+            {/* Left: Nav / Title */}
+            <div className="min-w-0 flex-1">
+              {/* Desktop Breadcrumb */}
+              <nav aria-label="Breadcrumb" className="hidden sm:flex items-center gap-1.5 text-[13px] text-muted">
+                <Link to="/" className="hover:text-ink transition">
+                  Workspace
+                </Link>
+                <span className="text-slate-300">/</span>
+                <Link to={`/create?edition=${editionId}`} className="hover:text-ink truncate max-w-[200px] transition">
+                  {edition?.newspaper_name}
+                </Link>
+                <span className="text-slate-300">/</span>
+                <span className="text-ink font-semibold">Print</span>
+              </nav>
 
-        <div className="flex items-center gap-3">
-          <Link
-            to={`/create?edition=${editionId}`}
-            className="rounded-xl border border-line px-5 py-3 text-[15px] font-medium text-ink transition hover:bg-navy-50"
-          >
-            Back to editor
-          </Link>
-          {/* Nothing server-side ever sets `completed` — validate only promotes
-              an edition to `ready` — so archiving it is a client action. */}
-          {edition?.status === 'completed' ? (
-            <span className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-[15px] font-semibold text-emerald-700">
-              <CheckIcon className="size-5" />
-              Completed
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={markCompleted}
-              disabled={missing.length > 0 || completing}
-              title="Archive this edition as completed"
-              className="rounded-xl border border-line px-5 py-3 text-[15px] font-medium text-ink transition hover:bg-navy-50 disabled:opacity-50"
-            >
-              {completing ? 'Marking…' : 'Mark completed'}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => window.print()}
-            disabled={missing.length > 0 || !printFitReady || noCompleteSentenceFits.length > 0}
-            title={!printFitReady ? 'Measuring copy against the fixed PDF layout' : undefined}
-            className="inline-flex items-center gap-2 rounded-xl bg-navy-900 px-6 py-3 text-[15px] font-semibold text-white transition hover:bg-navy-700 disabled:opacity-50"
-          >
-            <CheckIcon className="size-5" />
-            {printFitReady ? 'Print / Save as PDF' : 'Preparing PDF…'}
-          </button>
+              {/* Mobile Back Link + Title */}
+              <div className="flex sm:hidden items-center gap-2">
+                <Link
+                  to={`/create?edition=${editionId}`}
+                  className="inline-flex items-center gap-1 rounded-lg border border-line bg-slate-50 px-2 py-1 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-100 active:scale-95 shrink-0"
+                >
+                  <ChevronLeftIcon className="size-3.5" />
+                  <span>Editor</span>
+                </Link>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-[13px] font-bold text-navy-900 truncate leading-tight">
+                    {edition?.newspaper_name}
+                  </h1>
+                </div>
+              </div>
+
+              {/* Subtitle / format info */}
+              <p className="mt-0.5 text-[11px] sm:text-[13px] text-muted truncate">
+                Tabloid 289 × 380 mm · 4 pages · Save as PDF in print dialog
+              </p>
+            </div>
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 shrink-0">
+              <Link
+                to={`/create?edition=${editionId}`}
+                className="hidden sm:inline-flex rounded-xl border border-line px-4 py-2 text-[14px] font-medium text-ink transition hover:bg-navy-50"
+              >
+                Back to editor
+              </Link>
+
+              {edition?.status === 'completed' ? (
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 sm:px-4 sm:py-2 text-[12px] sm:text-[14px] font-semibold text-emerald-700">
+                  <CheckIcon className="size-4" />
+                  <span className="hidden xs:inline">Completed</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={markCompleted}
+                  disabled={missing.length > 0 || completing}
+                  title="Archive this edition as completed"
+                  className="rounded-xl border border-line px-3 py-1.5 sm:px-4 sm:py-2 text-[12px] sm:text-[14px] font-medium text-ink transition hover:bg-navy-50 disabled:opacity-50"
+                >
+                  {completing ? '…' : 'Mark completed'}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                disabled={missing.length > 0 || !printFitReady || noCompleteSentenceFits.length > 0}
+                title={!printFitReady ? 'Measuring copy against the fixed PDF layout' : undefined}
+                className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-navy-900 px-3.5 py-1.5 sm:px-5 sm:py-2 text-[12px] sm:text-[14px] font-semibold text-white transition hover:bg-navy-700 disabled:opacity-50 shadow-xs active:scale-95"
+              >
+                <PrinterIcon className="size-4 shrink-0" />
+                <span>
+                  {!printFitReady
+                    ? 'Preparing…'
+                    : 'Print PDF'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Controls Bar: Page Nav & Zoom */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/70 pt-2 text-[12px]">
+            {/* Page Jump Pills */}
+            <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scroll-thin py-0.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted shrink-0 mr-1 hidden sm:inline">
+                Jump to:
+              </span>
+              {pages.map((p) => (
+                <button
+                  key={p.page_number}
+                  type="button"
+                  onClick={() => scrollToPage(p.page_number)}
+                  className={[
+                    'rounded-lg px-2.5 py-1 text-[11px] sm:text-[12px] font-semibold transition shrink-0',
+                    activePage === p.page_number
+                      ? 'bg-navy-900 text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-95',
+                  ].join(' ')}
+                >
+                  Page {p.page_number}
+                </button>
+              ))}
+            </div>
+
+            {/* Zoom Controls */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
+              <button
+                type="button"
+                onClick={handleZoomFit}
+                title="Fit sheet to screen width"
+                className={[
+                  'rounded-lg px-2.5 py-1 text-[11px] sm:text-[12px] font-semibold transition shrink-0',
+                  zoomMode === 'fit'
+                    ? 'bg-brand-50 text-brand-600 border border-brand-200'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-transparent',
+                ].join(' ')}
+              >
+                Fit
+              </button>
+              <button
+                type="button"
+                onClick={handleZoom100}
+                title="View actual 100% size"
+                className={[
+                  'rounded-lg px-2.5 py-1 text-[11px] sm:text-[12px] font-semibold transition shrink-0',
+                  zoomMode === '100'
+                    ? 'bg-brand-50 text-brand-600 border border-brand-200'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-transparent',
+                ].join(' ')}
+              >
+                100%
+              </button>
+              <div className="flex items-center rounded-lg border border-line bg-slate-50 px-1 py-0.5 text-slate-600">
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  title="Zoom out"
+                  aria-label="Zoom out"
+                  className="p-1 hover:text-ink active:scale-90 transition disabled:opacity-40"
+                  disabled={currentScale <= 0.25}
+                >
+                  <ZoomOutIcon className="size-3.5" />
+                </button>
+                <span className="px-1 text-[11px] font-semibold tabular-nums text-slate-700 select-none">
+                  {Math.round(currentScale * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  title="Zoom in"
+                  aria-label="Zoom in"
+                  className="p-1 hover:text-ink active:scale-90 transition disabled:opacity-40"
+                  disabled={currentScale >= 1.5}
+                >
+                  <ZoomInIcon className="size-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
-      {completeError && (
-        <p
-          role="alert"
-          className="no-print mx-auto mt-6 max-w-[900px] rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-[15px] text-red-700"
-        >
-          {completeError}
-        </p>
-      )}
-
-      {missing.length > 0 && (
-        <div className="no-print mx-auto mt-6 max-w-[900px] rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-[15px] text-amber-900">
-          <p className="font-semibold">
-            {missing.length} of {TOTAL_SECTIONS} sections are not complete yet, so printing is
-            disabled.
-          </p>
-          <p className="mt-1">
-            {missing.map((block) => `p${block.page_number} ${block.section_name}`).join(', ')}
-          </p>
-          <Link
-            to={`/create?edition=${editionId}`}
-            className="mt-3 inline-flex items-center gap-2 font-medium text-brand-600 hover:text-brand-500"
+      {/* Notice / Warning Banners */}
+      <div className="no-print mx-auto w-full max-w-4xl px-3 sm:px-6 pt-3 sm:pt-5 space-y-3">
+        {completeError && (
+          <p
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 p-3.5 sm:p-4 text-[13px] sm:text-[14px] text-red-700 shadow-2xs"
           >
-            Finish them in the editor
-            <ArrowRightIcon className="size-4" />
-          </Link>
-        </div>
-      )}
+            {completeError}
+          </p>
+        )}
 
-      {truncatedSections.length > 0 && (
-        <div className="no-print mx-auto mt-6 max-w-[900px] rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-[15px] text-amber-900">
-          <p className="font-semibold">
-            The fixed-size PDF will include complete sentences that fit each text box.
-          </p>
-          <p className="mt-1">
-            {noCompleteSentenceFits.length > 0
-              ? `No complete sentence fits in: ${noCompleteSentenceFits.map(({ block }) => block.section_name).join(', ')}. Shorten those sections before printing.`
-              : `Trailing copy is omitted from: ${truncatedSections.map(({ block }) => block.section_name).join(', ')}.`}
-          </p>
-        </div>
-      )}
+        {missing.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 sm:p-4 text-[13px] sm:text-[14px] text-amber-900 shadow-2xs">
+            <p className="font-semibold text-amber-950">
+              {missing.length} of {TOTAL_SECTIONS} sections are not complete yet, so printing is disabled.
+            </p>
+            <p className="mt-1 text-[12px] sm:text-[13px] leading-relaxed text-amber-900/90">
+              {missing.map((block) => `p${block.page_number} ${block.section_name}`).join(', ')}
+            </p>
+            <Link
+              to={`/create?edition=${editionId}`}
+              className="mt-2.5 inline-flex items-center gap-1.5 text-[12px] sm:text-[13px] font-semibold text-brand-600 hover:text-brand-500"
+            >
+              Finish them in the editor
+              <ArrowRightIcon className="size-3.5" />
+            </Link>
+          </div>
+        )}
 
-      {missing.length === 0 && thin.length > 0 && (
-        <div className="no-print mx-auto mt-6 max-w-[900px] rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-[15px] text-amber-900">
-          <p className="font-semibold">
-            {thin.length} section{thin.length === 1 ? '' : 's'} will leave white space — the text
-            fills less than {Math.round(MIN_FILL_RATIO * 100)}% of the box.
-          </p>
-          <p className="mt-1">
-            {thin
-              .map(
-                ({ block, length, capacity }) =>
-                  `${block.section_name} (${Math.round((length / capacity) * 100)}%)`,
-              )
-              .join(', ')}
-          </p>
-          <Link
-            to={`/create?edition=${editionId}`}
-            className="mt-3 inline-flex items-center gap-2 font-medium text-brand-600 hover:text-brand-500"
-          >
-            Use “Fill thin sections” in the editor
-            <ArrowRightIcon className="size-4" />
-          </Link>
-        </div>
-      )}
+        {truncatedSections.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 sm:p-4 text-[13px] sm:text-[14px] text-amber-900 shadow-2xs">
+            <p className="font-semibold text-amber-950">
+              The fixed-size PDF will include complete sentences that fit each text box.
+            </p>
+            <p className="mt-1 text-[12px] sm:text-[13px] leading-relaxed text-amber-900/90">
+              {noCompleteSentenceFits.length > 0
+                ? `No complete sentence fits in: ${noCompleteSentenceFits.map(({ block }) => block.section_name).join(', ')}. Shorten those sections before printing.`
+                : `Trailing copy is omitted from: ${truncatedSections.map(({ block }) => block.section_name).join(', ')}.`}
+            </p>
+          </div>
+        )}
+
+        {missing.length === 0 && thin.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 sm:p-4 text-[13px] sm:text-[14px] text-amber-900 shadow-2xs">
+            <p className="font-semibold text-amber-950">
+              {thin.length} section{thin.length === 1 ? '' : 's'} will leave white space — the text
+              fills less than {Math.round(MIN_FILL_RATIO * 100)}% of the box.
+            </p>
+            <p className="mt-1 text-[12px] sm:text-[13px] leading-relaxed text-amber-900/90">
+              {thin
+                .map(
+                  ({ block, length, capacity }) =>
+                    `${block.section_name} (${Math.round((length / capacity) * 100)}%)`,
+                )
+                .join(', ')}
+            </p>
+            <Link
+              to={`/create?edition=${editionId}`}
+              className="mt-2.5 inline-flex items-center gap-1.5 text-[12px] sm:text-[13px] font-semibold text-brand-600 hover:text-brand-500"
+            >
+              Use “Fill thin sections” in the editor
+              <ArrowRightIcon className="size-3.5" />
+            </Link>
+          </div>
+        )}
+      </div>
 
       <div
         ref={sheetsRef}
         style={{
           '--body-pt': `${capacityLanguage === 'malayalam' ? TYPE.malayalamBodyPt : TYPE.bodyPt}pt`,
         }}
-        className="flex flex-col items-center gap-8 px-6 py-8 print:gap-0 print:p-0"
+        className="flex flex-col items-center gap-6 sm:gap-8 px-2 sm:px-6 pt-4 pb-12 sm:pt-6 sm:pb-16 print:gap-0 print:p-0 print:m-0 print:block"
       >
         {pages.map((page) => (
-          <Sheet
+          <div
             key={page.page_number}
-            page={page}
-            pages={pages}
-            totalPages={pages.length}
-            edition={edition}
-            sections={printSections}
-            capacityLanguage={capacityLanguage}
-          />
+            id={`sheet-page-${page.page_number}`}
+            className="sheet-preview-wrapper scroll-mt-24 sm:scroll-mt-28 w-full flex flex-col items-center overflow-x-auto scroll-thin pb-2"
+          >
+            {/* Sheet Page Label on Screen */}
+            <div
+              className="no-print mb-2 flex items-center justify-between w-full px-2 text-[12px] font-semibold text-slate-500"
+              style={{ maxWidth: `${Math.max(naturalWidth * currentScale, 280)}px` }}
+            >
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-brand-500" />
+                Page {page.page_number} of {pages.length} — {page.name}
+              </span>
+              <span className="text-[11px] text-muted">
+                {Math.round(currentScale * 100)}%
+              </span>
+            </div>
+
+            {/* Scaled Preview Box */}
+            <div
+              className="sheet-scaler relative shrink-0 shadow-[0_10px_40px_-24px_rgba(15,32,68,0.5)] bg-white rounded-xs sm:rounded-sm overflow-hidden"
+              style={{
+                width: `${naturalWidth * currentScale}px`,
+                height: `${naturalHeight * currentScale}px`,
+              }}
+            >
+              <div
+                style={{
+                  transform: `scale(${currentScale})`,
+                  transformOrigin: 'top left',
+                  width: `${naturalWidth}px`,
+                  height: `${naturalHeight}px`,
+                }}
+              >
+                <Sheet
+                  page={page}
+                  pages={pages}
+                  totalPages={pages.length}
+                  edition={edition}
+                  sections={printSections}
+                  capacityLanguage={capacityLanguage}
+                />
+              </div>
+            </div>
+          </div>
         ))}
       </div>
     </div>
