@@ -7,6 +7,8 @@ import Waveform from '../components/Waveform'
 import {
   ArrowRightIcon,
   CheckIcon,
+  ChevronDownIcon,
+  GridIcon,
   InfoIcon,
   MicIcon,
   PencilIcon,
@@ -48,6 +50,7 @@ function toSectionMap(saved = []) {
       // The label is stored per section on the server (SectionBase.section_name),
       // so a rename survives a reload. Empty means "use the canonical name".
       section_name: section.section_name ?? '',
+      content_source: section.content_source ?? '',
       image_url: section.image_url ?? '',
       image_caption: section.image_caption ?? '',
       photoMode: hasImg
@@ -63,6 +66,7 @@ const emptySection = {
   content: '',
   status: 'draft',
   section_name: '',
+  content_source: '',
   image_url: '',
   image_caption: '',
   photoMode: 'none',
@@ -110,6 +114,23 @@ export default function CreateTask() {
   const [generating, setGenerating] = useState(false)
   const [validation, setValidation] = useState(null)
   const [fill, setFill] = useState({ running: false, done: 0, total: 0, failed: [] })
+  const [mobileEditorOpen, setMobileEditorOpen] = useState(false)
+  const [mobileTemplateOpen, setMobileTemplateOpen] = useState(false)
+
+  // Prevent background scrolling and handle Escape key when mobile bottom sheet is open
+  useEffect(() => {
+    if (mobileEditorOpen) {
+      document.body.style.overflow = 'hidden'
+      const handleKeyDown = (e) => {
+        if (e.key === 'Escape') setMobileEditorOpen(false)
+      }
+      window.addEventListener('keydown', handleKeyDown)
+      return () => {
+        document.body.style.overflow = ''
+        window.removeEventListener('keydown', handleKeyDown)
+      }
+    }
+  }, [mobileEditorOpen])
 
   useEffect(() => {
     if (typeof document === 'undefined' || !document.fonts || fontMetricsReady) return undefined
@@ -231,6 +252,7 @@ export default function CreateTask() {
           status: draft.status,
           image_url: draft.photoMode === 'none' ? null : (draft.image_url || null),
           image_caption: draft.photoMode === 'none' ? null : (draft.image_caption || null),
+          content_source: draft.content_source || null,
         })
         setSaveState('saved')
       } catch (err) {
@@ -352,6 +374,9 @@ export default function CreateTask() {
       setVoiceDraft('')
       setActiveKey(sectionKey)
       setNotice('')
+      if (typeof window !== 'undefined' && window.innerWidth < 1280) {
+        setMobileEditorOpen(true)
+      }
     },
     [flush, activeKey, speech],
   )
@@ -405,6 +430,10 @@ export default function CreateTask() {
       const updates = {
         content: expandedContent,
         title: generatedTitle,
+      }
+      const attributionLine = result.attribution_line || (result.source_name ? `Source: ${result.source_name}` : '')
+      if (attributionLine) {
+        updates.content_source = attributionLine
       }
       if (isAiPhoto && result.image_url) {
         updates.image_url = result.image_url
@@ -539,6 +568,12 @@ export default function CreateTask() {
           content: bestContent,
           title: generatedTitle,
         }
+        const attributionLine =
+          firstResult?.attribution_line ||
+          (firstResult?.source_name ? `Source: ${firstResult.source_name}` : '')
+        if (attributionLine) {
+          updates.content_source = attributionLine
+        }
         if (isAiPhoto && photoResult?.image_url) {
           updates.image_url = photoResult.image_url
           if (photoResult.image_caption) updates.image_caption = photoResult.image_caption
@@ -587,6 +622,7 @@ export default function CreateTask() {
   /* ------------------------------------------------------------- photos */
 
   const fileInputRef = useRef(null)
+  const mobileFileInputRef = useRef(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   function handleToggleAiPhoto() {
@@ -625,6 +661,7 @@ export default function CreateTask() {
     } finally {
       setUploadingPhoto(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
+      if (mobileFileInputRef.current) mobileFileInputRef.current.value = ''
     }
   }
 
@@ -707,6 +744,467 @@ export default function CreateTask() {
     [sections],
   )
 
+  const slotIndex = page?.blocks ? page.blocks.findIndex((b) => b.section_key === activeKey) + 1 : 1
+
+  function renderSectionEditor({ isMobile = false }) {
+    const currentFileInputRef = isMobile ? mobileFileInputRef : fileInputRef
+    return (
+      <>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[14px] font-medium text-ink">Section label</span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-600 border border-brand-100">
+                  Slot {slotIndex} of {page?.blocks?.length || 4}
+                </span>
+                {nameIsCustom && (
+                  <button
+                    type="button"
+                    onClick={() => editSection(activeKey, { section_name: '' })}
+                    className="text-[13px] font-medium text-brand-600 transition hover:text-brand-500"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-line bg-white px-4 transition focus-within:border-brand-500">
+              <PencilIcon className="size-4 shrink-0 text-muted" />
+              <input
+                value={activeName}
+                onChange={(e) =>
+                  editSection(activeKey, { section_name: e.target.value.slice(0, 60) })
+                }
+                aria-label="Section label"
+                className="min-w-0 flex-1 bg-transparent py-2.5 text-[16px] sm:text-[17px] font-bold text-navy-900 outline-none"
+              />
+            </div>
+
+            <p className="mt-1.5 text-[13px] text-muted">
+              Page {block.page_number} · about {charLimit} characters for the fixed-size PDF
+              {hasActivePhoto ? ' (photo capacity)' : ''}
+            </p>
+          </div>
+          {activeSection.status === 'completed' && (
+            <span className="mt-6 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[12px] font-medium text-emerald-700">
+              <CheckIcon className="size-3.5" />
+              Complete
+            </span>
+          )}
+        </div>
+
+        <label className="mt-5 block">
+          <span className="text-[14px] font-medium text-ink">Headline</span>
+          <input
+            value={activeSection.title}
+            onChange={(e) => editSection(activeKey, { title: e.target.value })}
+            placeholder="Type or generate a headline..."
+            className="mt-1.5 w-full rounded-xl border border-line bg-white px-4 py-3 text-[15px] outline-none focus:border-brand-500"
+          />
+        </label>
+
+        <label className="mt-3.5 block">
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] font-medium text-ink">Source / Attribution</span>
+            <span className="text-[11px] text-muted">Printed under headline</span>
+          </div>
+          <input
+            value={activeSection.content_source ?? ''}
+            onChange={(e) => editSection(activeKey, { content_source: e.target.value })}
+            placeholder="e.g. Source: Firstpost"
+            className="mt-1.5 w-full rounded-xl border border-line bg-white px-4 py-2.5 text-[14px] text-slate-800 outline-none focus:border-brand-500 placeholder:text-slate-400"
+          />
+        </label>
+
+        {/* Optional Section Photo Module */}
+        <div className="mt-4 rounded-2xl border border-line bg-white p-3.5 sm:p-4 shadow-xs transition">
+          {/* Header: Title + Status Pill */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                <PhotoIcon className="size-4" />
+              </div>
+              <span className="text-[13px] font-bold text-navy-900 truncate">
+                Section Photo
+              </span>
+            </div>
+            {hasActivePhoto ? (
+              <span className="inline-flex shrink-0 items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 border border-brand-100">
+                {activeSection.photoMode === 'upload' ? 'Uploaded' : 'AI Active'}
+              </span>
+            ) : (
+              <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500">
+                Optional
+              </span>
+            )}
+          </div>
+
+          {/* Two Action Buttons: AI Photo Toggle & Upload Photo */}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {/* AI Photo Toggle Card */}
+            <div
+              onClick={handleToggleAiPhoto}
+              className={[
+                'flex items-center justify-between rounded-xl border px-2.5 py-2 cursor-pointer transition select-none',
+                activeSection.photoMode === 'ai'
+                  ? 'border-brand-300 bg-brand-50/80 shadow-2xs'
+                  : 'border-line bg-slate-50/60 hover:bg-slate-100/80 hover:border-slate-300',
+              ].join(' ')}
+              title="Toggle AI Google/News Photo search for this section"
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                <SparkleIcon className="size-3.5 text-brand-500 shrink-0" />
+                <span className="text-[12px] font-semibold text-slate-800 truncate">
+                  AI Photo
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={activeSection.photoMode === 'ai'}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleToggleAiPhoto()
+                }}
+                className={[
+                  'relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                  activeSection.photoMode === 'ai' ? 'bg-brand-500' : 'bg-slate-300',
+                ].join(' ')}
+              >
+                <span
+                  className={[
+                    'pointer-events-none inline-block size-3 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out',
+                    activeSection.photoMode === 'ai' ? 'translate-x-3' : 'translate-x-0',
+                  ].join(' ')}
+                />
+              </button>
+            </div>
+
+            {/* Upload Photo Button */}
+            <input
+              type="file"
+              ref={currentFileInputRef}
+              onChange={handleFileUpload}
+              accept="image/*"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => currentFileInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              title="Upload photo from your device"
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-line bg-slate-50/60 px-2.5 py-2 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-ink hover:border-slate-300 active:scale-95 disabled:opacity-60"
+            >
+              {uploadingPhoto ? (
+                <RefreshCwIcon className="size-3.5 animate-spin text-slate-500 shrink-0" />
+              ) : (
+                <UploadIcon className="size-3.5 text-slate-500 shrink-0" />
+              )}
+              <span>{uploadingPhoto ? 'Uploading…' : 'Upload'}</span>
+            </button>
+          </div>
+
+          {/* Helper notice when AI photo is enabled but no image is generated yet */}
+          {activeSection.photoMode === 'ai' && !activeSection.image_url && (
+            <div className="mt-3 rounded-xl bg-brand-50/70 border border-brand-100 p-2.5 text-[11px] text-brand-900">
+              <div className="flex items-center justify-between font-semibold text-brand-950">
+                <div className="flex items-center gap-1.5">
+                  <SparkleIcon className="size-3 text-brand-600" />
+                  <span>AI Search Ready</span>
+                </div>
+                <span className="text-[10px] text-brand-700 bg-brand-100 px-1.5 py-0.5 rounded font-bold">
+                  -{baseCharLimit - charLimit} chars
+                </span>
+              </div>
+              <p className="mt-1 text-brand-700 leading-normal">
+                Click <strong>Expand to fit</strong> below to search and attach an authentic news photo, or upload your own.
+              </p>
+            </div>
+          )}
+
+          {/* Active Photo State: Thumbnail, Caption, Remove */}
+          {Boolean(activeSection.image_url) && (
+            <div className="mt-3 pt-3 border-t border-slate-100 space-y-2.5">
+              <div className="flex items-center gap-3">
+                {/* Photo Thumbnail */}
+                <div className="relative size-14 shrink-0 overflow-hidden rounded-xl border border-line bg-slate-100 shadow-2xs flex items-center justify-center text-slate-400">
+                  <PhotoIcon className="size-6 text-slate-300" />
+                  <img
+                    src={activeSection.image_url}
+                    alt="Section preview"
+                    className="absolute inset-0 size-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                  {activeSection.photoMode === 'ai' && (
+                    <span className="absolute bottom-0 inset-x-0 bg-brand-600/90 text-[8px] font-bold text-white text-center py-0.5 tracking-wider uppercase">
+                      AI
+                    </span>
+                  )}
+                </div>
+
+                {/* Caption Input with Remove in Label Row */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-muted uppercase tracking-wider">
+                      Caption / Credit
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {activeSection.photoMode === 'ai' && (
+                        <button
+                          type="button"
+                          onClick={handleExpand}
+                          disabled={generating || !fontMetricsReady}
+                          title="Regenerate photo via AI"
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-600 hover:text-brand-700 transition disabled:opacity-50"
+                        >
+                          <SparkleIcon className="size-3 text-brand-500" />
+                          <span>Refetch</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleRemovePhoto}
+                        title="Remove photo and restore character capacity"
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-red-600 hover:text-red-700 transition"
+                      >
+                        <TrashIcon className="size-3" />
+                        <span>Remove</span>
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    value={activeSection.image_caption || ''}
+                    onChange={(e) =>
+                      editSection(activeKey, { image_caption: e.target.value })
+                    }
+                    placeholder="e.g., Photo: Staff Reporter"
+                    className="mt-1 w-full rounded-lg border border-line bg-slate-50/50 px-2.5 py-1.5 text-[13px] text-ink outline-none transition focus:border-brand-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Live Capacity Indicator */}
+              <div className="flex items-center justify-between rounded-lg bg-brand-50/70 px-2.5 py-1.5 text-[11px] text-brand-900 border border-brand-100/60">
+                <span className="font-semibold text-brand-950">
+                  Capacity: {charLimit} chars
+                </span>
+                <span className="font-medium text-brand-700">
+                  -{baseCharLimit - charLimit} chars for layout
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Unified Body Text & Voice Dictation Input */}
+        <div className="mt-5 rounded-2xl border border-line bg-white p-4 transition-all focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/10 shadow-xs">
+          {/* Textarea for typing */}
+          <textarea
+            value={activeSection.content}
+            onChange={(e) =>
+              editSection(activeKey, { content: e.target.value })
+            }
+            onBlur={(e) => {
+              if (e.target.value.length <= charLimit) return
+              const fitted = truncateAtSentenceBoundary(e.target.value, charLimit, editionLanguage)
+              if (fitted) {
+                editSection(activeKey, { content: fitted })
+                setNotice('Text was limited at a complete sentence to fit the print capacity.')
+              }
+              else setNotice('No complete sentence fits this section. Shorten the copy or remove the photo.')
+            }}
+            placeholder="Type section body, or record voice below..."
+            rows={8}
+            aria-label={'Body text for ' + activeName}
+            className="scroll-subtle h-[170px] sm:h-[200px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
+          />
+          {activeSection.content.length > charLimit && (
+            <p className="mt-2 text-[11px] leading-relaxed text-amber-700">
+              This copy exceeds the estimated print capacity. On leaving the field, trailing
+              text is kept only through a complete sentence; the PDF checks the actual layout.
+            </p>
+          )}
+
+          {/* --- 1. ACTIVE RECORDING STATE --- */}
+          {speech.listening && (
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50/80 p-2.5 shadow-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="relative flex size-2.5 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex size-2.5 rounded-full bg-red-500" />
+                  </span>
+                  <span className="text-[14px] font-bold text-red-600 tabular-nums shrink-0">
+                    {speech.elapsed}
+                  </span>
+                  <Waveform
+                    bars={10}
+                    animated={speech.listening}
+                    level={mic.level}
+                    className="h-5 shrink-0"
+                    color="bg-red-500"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleDiscardVoice}
+                    title="Cancel recording"
+                    aria-label="Cancel recording"
+                    className="grid size-8 place-items-center rounded-lg border border-red-200 bg-white text-red-600 shadow-xs transition hover:bg-red-50 active:scale-95 shrink-0"
+                  >
+                    <TrashIcon className="size-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStopRecording}
+                    title="Stop recording"
+                    aria-label="Stop recording"
+                    className="grid size-8 place-items-center rounded-lg bg-red-600 text-white shadow-xs transition hover:bg-red-700 active:scale-95 shrink-0"
+                  >
+                    <StopIcon className="size-4" />
+                  </button>
+                </div>
+              </div>
+
+              {(voiceDraft || speech.interim) && (
+                <div className="mt-2 rounded-lg border border-red-100 bg-white/95 p-2.5 text-[13px] leading-relaxed text-navy-900 shadow-xs">
+                  <span>{voiceDraft} </span>
+                  {speech.interim && (
+                    <span className="text-red-500 italic opacity-85">{speech.interim}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* --- 2. REVIEW & DECIDE STATE (APPLY OR DELETE) --- */}
+          {!speech.listening && voiceDraft.trim().length > 0 && (
+            <div className="mt-3 rounded-xl border border-brand-200 bg-brand-50/70 p-3 shadow-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-brand-900">
+                  <MicIcon className="size-4 text-brand-600" />
+                  <span className="text-[13px] font-bold tracking-wide">
+                    Recorded Voice
+                  </span>
+                </div>
+                <span className="text-[12px] font-medium text-muted">
+                  {voiceDraft.length} chars
+                </span>
+              </div>
+
+              <div className="mt-2">
+                <textarea
+                  value={voiceDraft}
+                  onChange={(e) => setVoiceDraft(e.target.value)}
+                  rows={2}
+                  placeholder="Transcribed text..."
+                  className="w-full rounded-lg border border-brand-200 bg-white p-2.5 text-[14px] leading-relaxed text-navy-900 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20"
+                />
+              </div>
+
+              <div className="mt-2.5 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleDiscardVoice}
+                  title="Delete transcript"
+                  aria-label="Delete transcript"
+                  className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-rose-600 shadow-xs transition hover:bg-rose-50 active:scale-95"
+                >
+                  <TrashIcon className="size-3.5" />
+                  <span>Delete</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyVoice}
+                  title="Apply text to section"
+                  aria-label="Apply text to section"
+                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-xs transition hover:bg-emerald-700 active:scale-95"
+                >
+                  <CheckIcon className="size-3.5" />
+                  <span>Apply</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* --- 3. IDLE BOTTOM ACTION BAR --- */}
+          {!speech.listening && !voiceDraft.trim() && (
+            <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+              <div className="flex items-center gap-2 text-[13px] text-muted">
+                <span className={activeSection.content.length >= charLimit ? 'font-semibold text-amber-600' : ''}>
+                  {activeSection.content.length}/{charLimit} chars
+                </span>
+              </div>
+
+              {speech.supported ? (
+                <button
+                  type="button"
+                  onClick={handleStartRecording}
+                  aria-label="Click to start voice recording"
+                  title="Click to start voice recording"
+                  className="grid size-9 place-items-center rounded-full bg-brand-500 text-white transition hover:bg-brand-600 active:scale-95 shadow-xs"
+                >
+                  <MicIcon className="size-4.5" />
+                </button>
+              ) : (
+                <span title="Voice dictation not supported in this browser" className="text-muted text-[13px] opacity-60 flex items-center gap-1.5">
+                  <MicIcon className="size-4" />
+                  <span>Voice not supported</span>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {(speech.error || mic.error || notice) && (
+          <p role="alert" className="mt-3 rounded-lg bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+            {speech.error || mic.error || notice}
+          </p>
+        )}
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={handleExpand}
+            disabled={generating || !fontMetricsReady || !activeSection.content.trim()}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
+          >
+            <SparkleIcon className="size-5" />
+            {generating ? 'Working…' : 'Expand to fit'}
+          </button>
+          <button
+            type="button"
+            onClick={handleHeadline}
+            disabled={generating || !activeSection.content.trim()}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-brand-500 py-3.5 text-[15px] font-semibold text-brand-600 transition hover:bg-brand-50 disabled:opacity-50"
+          >
+            <SparkleIcon className="size-5" />
+            Write headline
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleComplete}
+          className={[
+            'mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[15px] font-semibold transition',
+            activeSection.status === 'completed'
+              ? 'border border-line bg-white text-ink hover:bg-navy-50'
+              : 'bg-navy-900 text-white hover:bg-navy-700',
+          ].join(' ')}
+        >
+          <CheckIcon className="size-5" />
+          {activeSection.status === 'completed' ? 'Reopen as draft' : 'Mark section complete'}
+        </button>
+      </>
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col md:flex-row bg-white">
@@ -733,10 +1231,24 @@ export default function CreateTask() {
   }
 
   return (
-    <div className="flex h-screen flex-col md:flex-row overflow-hidden bg-white">
-      <Sidebar variant="panel" />
+    <div className="flex h-[100dvh] flex-col md:flex-row overflow-hidden bg-white">
+      <Sidebar
+        variant="panel"
+        mobileBadge={editionLanguage === 'malayalam' ? 'ML' : 'EN'}
+        mobileSubtitle={`${edition?.edition_label ? edition.edition_label + ' Edition' : 'Morning Edition'} · ${completedCount}/${TOTAL_SECTIONS} done`}
+        mobileRightAction={
+          <button
+            type="button"
+            onClick={() => refreshValidation(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-navy-900 px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-xs transition hover:bg-navy-700 active:scale-95"
+          >
+            <span>Readiness</span>
+            <ArrowRightIcon className="size-3.5" />
+          </button>
+        }
+      />
 
-      {/* Page picker */}
+      {/* Page picker (Desktop only xl+) */}
       <aside className="hidden w-[275px] shrink-0 flex-col border-r border-line bg-canvas px-3.5 py-5 xl:flex">
         <div className="pl-3.5 pr-1">
           <h2 className="text-[19px] font-bold text-navy-900 leading-tight">Pages &amp; Templates</h2>
@@ -843,8 +1355,9 @@ export default function CreateTask() {
       </aside>
 
       {/* Main column */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 lg:px-6">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Desktop Header (hidden on mobile < md) */}
+        <header className="hidden md:flex flex-wrap items-center justify-between gap-3 px-5 py-4 lg:px-6">
           <nav aria-label="Breadcrumb" className="text-[14px] text-muted">
             <Link to="/" className="hover:text-ink">
               Workspace
@@ -891,8 +1404,7 @@ export default function CreateTask() {
               </span>
             </button>
 
-            {/* Existing copy was written against the old undersized limits, so
-                a bulk pass avoids running "Expand to fit" nineteen times. */}
+            {/* Existing copy fill pass */}
             {(underFilled.length > 0 || fill.running) && (
               <button
                 type="button"
@@ -917,18 +1429,21 @@ export default function CreateTask() {
           </div>
         </header>
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-5 pb-5 lg:px-6">
-          <h1 className="shrink-0 text-[clamp(26px,2.6vw,36px)] font-bold text-navy-900">
-            {edition?.newspaper_name}
-          </h1>
-          <div className="shrink-0 mt-2 flex flex-wrap items-center gap-2 text-[17px] text-muted">
-            <span>
-              {edition?.edition_label} edition · {edition?.date} · {completedCount}/{TOTAL_SECTIONS}{' '}
-              sections completed
-            </span>
-            <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-[12px] font-semibold capitalize text-brand-600 border border-brand-100">
-              {editionLanguage}
-            </span>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-3 sm:px-5 pb-3 lg:px-6 overflow-hidden">
+          {/* Desktop Title & Details (hidden on mobile < md) */}
+          <div className="hidden md:block">
+            <h1 className="shrink-0 text-[clamp(26px,2.6vw,36px)] font-bold text-navy-900">
+              {edition?.newspaper_name}
+            </h1>
+            <div className="shrink-0 mt-2 flex flex-wrap items-center gap-2 text-[17px] text-muted">
+              <span>
+                {edition?.edition_label} edition · {edition?.date} · {completedCount}/{TOTAL_SECTIONS}{' '}
+                sections completed
+              </span>
+              <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-[12px] font-semibold capitalize text-brand-600 border border-brand-100">
+                {editionLanguage}
+              </span>
+            </div>
           </div>
 
           {/* Floating Toast Notification for Readiness Check */}
@@ -937,7 +1452,7 @@ export default function CreateTask() {
               role="alert"
               aria-live="polite"
               className={[
-                'fixed top-6 right-6 z-50 w-full max-w-md overflow-hidden rounded-2xl border shadow-2xl backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-5',
+                'fixed top-4 right-4 left-4 sm:left-auto sm:top-6 sm:right-6 z-50 w-auto sm:w-full sm:max-w-md overflow-hidden rounded-2xl border shadow-2xl backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-5',
                 validation.all_completed
                   ? 'border-emerald-200 bg-white/95 text-emerald-950 shadow-emerald-900/10'
                   : 'border-amber-200 bg-white/95 text-amber-950 shadow-amber-900/10',
@@ -1041,30 +1556,155 @@ export default function CreateTask() {
             </p>
           )}
 
-          {/* Small-screen page switcher, since the sidebar is xl-only. */}
-          <div className="shrink-0 mt-6 flex gap-2 xl:hidden" role="group" aria-label="Select page">
-            {pages.map((item, index) => (
-              <button
-                key={item.page_number}
-                type="button"
-                onClick={() => selectPage(index)}
-                aria-pressed={index === pageIndex}
-                className={[
-                  'flex-1 rounded-xl border py-2.5 text-[14px] font-medium transition',
-                  index === pageIndex
-                    ? 'border-brand-500 bg-brand-500 text-white'
-                    : 'border-line bg-white text-ink',
-                ].join(' ')}
+          {/* Small-screen page switcher & template switcher (< xl) */}
+          <div className="shrink-0 mt-2 sm:mt-4 xl:hidden">
+            {/* Top Row: Scrollable Page Strip (Left) + Fixed Template Button (Right) */}
+            <div className="flex items-center gap-2">
+              {/* Horizontally scrollable page buttons strip */}
+              <div
+                className="scroll-subtle flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-1"
+                role="group"
+                aria-label="Select page"
               >
-                Page {item.page_number}
+                {pages.map((item, index) => {
+                  const selected = index === pageIndex
+                  const done = item.blocks.filter((b) => completedKeys.has(b.section_key)).length
+                  return (
+                    <button
+                      key={item.page_number}
+                      type="button"
+                      onClick={() => selectPage(index)}
+                      aria-pressed={selected}
+                      className={[
+                        'inline-flex shrink-0 items-center gap-2 rounded-2xl px-3.5 py-2 text-[13px] font-semibold transition select-none',
+                        selected
+                          ? 'bg-brand-500 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80',
+                      ].join(' ')}
+                    >
+                      <span>Page {item.page_number}</span>
+                      <span
+                        className={[
+                          'rounded-full px-2 py-0.5 text-[11px] font-bold tracking-tight',
+                          selected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600',
+                        ].join(' ')}
+                      >
+                        {done}/{item.blocks.length}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Fixed Pinned Template Switcher Button (Right) */}
+              <button
+                type="button"
+                onClick={() => setMobileTemplateOpen((v) => !v)}
+                aria-expanded={mobileTemplateOpen}
+                className={[
+                  'inline-flex shrink-0 items-center gap-2 rounded-2xl border px-3.5 py-2 text-[13px] font-semibold transition select-none shadow-2xs',
+                  mobileTemplateOpen
+                    ? 'border-brand-500 bg-brand-50/50 text-brand-600'
+                    : 'border-line bg-slate-50/80 text-slate-700 hover:bg-slate-100',
+                ].join(' ')}
+                title="Change page template"
+              >
+                <GridIcon className="size-4 text-brand-500" />
+                <span>{page.templateName}</span>
+                <ChevronDownIcon
+                  className={[
+                    'size-3.5 text-slate-400 transition-transform duration-200',
+                    mobileTemplateOpen ? 'rotate-180' : '',
+                  ].join(' ')}
+                />
               </button>
-            ))}
+            </div>
+
+            {/* Expandable Template Switcher Panel matching reference screenshot */}
+            {mobileTemplateOpen && (
+              <div className="mt-2.5 rounded-2xl border border-line bg-white p-3.5 shadow-sm animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-center justify-between px-0.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
+                    Change Page Template
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setMobileTemplateOpen(false)}
+                    className="text-[13px] font-bold text-brand-600 hover:text-brand-700 transition active:scale-95"
+                  >
+                    Done
+                  </button>
+                </div>
+
+                <div className="mt-2.5 grid grid-cols-3 gap-2 sm:gap-3">
+                  {templatesForPage(page.page_number).map((variant) => {
+                    const current = variant.key === page.templateKey
+                    return (
+                      <button
+                        key={variant.key}
+                        type="button"
+                        onClick={() => selectTemplate(page.page_number, variant.key)}
+                        aria-pressed={current}
+                        title={variant.description}
+                        className={[
+                          'flex flex-col items-center justify-center rounded-2xl border p-2.5 sm:p-3 text-center transition',
+                          current
+                            ? 'border-brand-500 bg-brand-50/20 ring-2 ring-brand-100 shadow-2xs'
+                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60',
+                        ].join(' ')}
+                      >
+                        <TemplateThumb
+                          blocks={buildPage(page.page_number, variant.key).blocks}
+                          completedKeys={completedKeys}
+                          className="w-[42px] sm:w-[48px] shrink-0"
+                        />
+                        <span
+                          className={[
+                            'mt-2 block truncate text-[12px] font-medium leading-tight',
+                            current ? 'font-bold text-brand-600' : 'text-slate-700',
+                          ].join(' ')}
+                        >
+                          {variant.name}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="mt-4 grid min-h-0 flex-1 gap-4 lg:gap-3 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
-            {/* The only scrolling region: the page picker, the header and the
-                section editor stay put while the sheet scrolls past them. */}
-            <div className="scroll-thin min-h-0 overflow-y-auto pr-1">
+          {/* Mobile Guidance & Action Banner (< md) */}
+          <div className="shrink-0 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-100 bg-brand-50/60 px-3.5 py-2.5 text-[12px] md:hidden">
+            <div className="flex items-center gap-2 text-brand-900 min-w-0">
+              <SparkleIcon className="size-3.5 text-brand-500 shrink-0" />
+              <span className="truncate">Tap any section box below to write or generate with AI</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <SaveIndicator state={saveState} />
+              {underFilled.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleFillAll}
+                  className="font-bold text-brand-600 hover:text-brand-700 underline underline-offset-2"
+                >
+                  {fill.running ? 'Stop Auto-Fill' : 'Auto-Fill AI Demo'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleTogglePageAiPhotos}
+                  className="font-semibold text-brand-600 hover:text-brand-700"
+                >
+                  {pageAiPhotosActive ? 'AI Photos: ON' : 'AI Photos: OFF'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 grid min-h-0 flex-1 gap-4 lg:gap-3 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px] overflow-hidden">
+            {/* The canvas scrolling region */}
+            <div className="scroll-thin min-h-0 flex-1 overflow-y-auto pr-1 pb-4">
               <NewspaperCanvas
                 page={page}
                 sections={sections}
@@ -1077,447 +1717,57 @@ export default function CreateTask() {
               />
             </div>
 
-            {/* Section editor */}
-            <section className="scroll-thin min-h-0 overflow-y-auto rounded-2xl border border-line bg-brand-50/40 p-4.5 sm:p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[14px] font-medium text-ink">Section label</span>
-                    {nameIsCustom && (
-                      <button
-                        type="button"
-                        onClick={() => editSection(activeKey, { section_name: '' })}
-                        className="text-[13px] font-medium text-brand-600 transition hover:text-brand-500"
-                      >
-                        Reset to “{block.section_name}”
-                      </button>
-                    )}
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-line bg-white px-4 transition focus-within:border-brand-500">
-                    <PencilIcon className="size-4 shrink-0 text-muted" />
-                    <input
-                      value={activeName}
-                      onChange={(e) =>
-                        editSection(activeKey, { section_name: e.target.value.slice(0, 60) })
-                      }
-                      aria-label="Section label"
-                      className="min-w-0 flex-1 bg-transparent py-2.5 text-[17px] font-bold text-navy-900 outline-none"
-                    />
-                  </div>
-                  <p className="mt-1.5 text-[13px] text-muted">
-                    Page {block.page_number} · about {charLimit} characters for the fixed-size PDF
-                    {hasActivePhoto ? ' (photo capacity)' : ''}
-                  </p>
-                </div>
-                {activeSection.status === 'completed' && (
-                  <span className="mt-6 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[12px] font-medium text-emerald-700">
-                    <CheckIcon className="size-3.5" />
-                    Complete
-                  </span>
-                )}
-              </div>
+            {/* Desktop Section editor */}
+            <section className="hidden xl:block scroll-thin min-h-0 overflow-y-auto rounded-2xl border border-line bg-brand-50/40 p-4.5 sm:p-5">
+              {renderSectionEditor({ isMobile: false })}
+            </section>
+          </div>
 
-              <label className="mt-5 block">
-                <span className="text-[14px] font-medium text-ink">Headline</span>
-                <input
-                  value={activeSection.title}
-                  onChange={(e) => editSection(activeKey, { title: e.target.value })}
-                  placeholder="Type or generate a headline..."
-                  className="mt-1.5 w-full rounded-xl border border-line bg-white px-4 py-3 text-[15px] outline-none focus:border-brand-500"
-                />
-              </label>
+          {/* Mobile Bottom Sheet Drawer (< xl) */}
+          {mobileEditorOpen && (
+            <div
+              className="fixed inset-0 z-50 xl:hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Edit section"
+            >
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 bg-navy-950/40 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
+                onClick={() => setMobileEditorOpen(false)}
+              />
 
-              {/* Optional Section Photo Module */}
-              <div className="mt-4 rounded-2xl border border-line bg-white p-3.5 sm:p-4 shadow-xs transition">
-                {/* Header: Title + Status Pill */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-                      <PhotoIcon className="size-4" />
-                    </div>
-                    <span className="text-[13px] font-bold text-navy-900 truncate">
-                      Section Photo
+              {/* Bottom Sheet Card */}
+              <div className="fixed inset-x-0 bottom-0 z-50 flex max-h-[90vh] w-full max-w-2xl mx-auto flex-col rounded-t-[28px] border-t border-line bg-white shadow-2xl transition-transform duration-300 ease-out animate-in slide-in-from-bottom">
+                {/* Drag handle pill */}
+                <div className="mx-auto mt-2.5 h-1.5 w-12 rounded-full bg-slate-300" />
+
+                {/* Sheet Header */}
+                <div className="flex items-center justify-between border-b border-line/70 px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="size-2 rounded-full bg-brand-500" />
+                    <span className="text-[12px] font-bold uppercase tracking-wider text-slate-700">
+                      Editing Section
                     </span>
+                    <SaveIndicator state={saveState} />
                   </div>
-                  {hasActivePhoto ? (
-                    <span className="inline-flex shrink-0 items-center rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 border border-brand-100">
-                      {activeSection.photoMode === 'upload' ? 'Uploaded' : 'AI Active'}
-                    </span>
-                  ) : (
-                    <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500">
-                      Optional
-                    </span>
-                  )}
-                </div>
-
-                {/* Two Action Buttons: AI Photo Toggle & Upload Photo */}
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {/* AI Photo Toggle Card */}
-                  <div
-                    onClick={handleToggleAiPhoto}
-                    className={[
-                      'flex items-center justify-between rounded-xl border px-2.5 py-2 cursor-pointer transition select-none',
-                      activeSection.photoMode === 'ai'
-                        ? 'border-brand-300 bg-brand-50/80 shadow-2xs'
-                        : 'border-line bg-slate-50/60 hover:bg-slate-100/80 hover:border-slate-300',
-                    ].join(' ')}
-                    title="Toggle AI Google/News Photo search for this section"
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <SparkleIcon className="size-3.5 text-brand-500 shrink-0" />
-                      <span className="text-[12px] font-semibold text-slate-800 truncate">
-                        AI Photo
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={activeSection.photoMode === 'ai'}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleToggleAiPhoto()
-                      }}
-                      className={[
-                        'relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                        activeSection.photoMode === 'ai' ? 'bg-brand-500' : 'bg-slate-300',
-                      ].join(' ')}
-                    >
-                      <span
-                        className={[
-                          'pointer-events-none inline-block size-3 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out',
-                          activeSection.photoMode === 'ai' ? 'translate-x-3' : 'translate-x-0',
-                        ].join(' ')}
-                      />
-                    </button>
-                  </div>
-
-                  {/* Upload Photo Button */}
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    accept="image/*"
-                    className="hidden"
-                  />
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadingPhoto}
-                    title="Upload photo from your device"
-                    className="flex items-center justify-center gap-1.5 rounded-xl border border-line bg-slate-50/60 px-2.5 py-2 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-ink hover:border-slate-300 active:scale-95 disabled:opacity-60"
+                    onClick={() => setMobileEditorOpen(false)}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3.5 py-1 text-[13px] font-bold text-navy-900 transition hover:bg-slate-200 active:scale-95"
                   >
-                    {uploadingPhoto ? (
-                      <RefreshCwIcon className="size-3.5 animate-spin text-slate-500 shrink-0" />
-                    ) : (
-                      <UploadIcon className="size-3.5 text-slate-500 shrink-0" />
-                    )}
-                    <span>{uploadingPhoto ? 'Uploading…' : 'Upload'}</span>
+                    <span>Done</span>
+                    <CheckIcon className="size-3.5 text-brand-600" />
                   </button>
                 </div>
 
-                {/* Helper notice when AI photo is enabled but no image is generated yet */}
-                {activeSection.photoMode === 'ai' && !activeSection.image_url && (
-                  <div className="mt-3 rounded-xl bg-brand-50/70 border border-brand-100 p-2.5 text-[11px] text-brand-900">
-                    <div className="flex items-center justify-between font-semibold text-brand-950">
-                      <div className="flex items-center gap-1.5">
-                        <SparkleIcon className="size-3 text-brand-600" />
-                        <span>AI Search Ready</span>
-                      </div>
-                      <span className="text-[10px] text-brand-700 bg-brand-100 px-1.5 py-0.5 rounded font-bold">
-                        -{baseCharLimit - charLimit} chars
-                      </span>
-                    </div>
-                    <p className="mt-1 text-brand-700 leading-normal">
-                      Click <strong>Expand to fit</strong> below to search and attach an authentic news photo, or upload your own.
-                    </p>
-                  </div>
-                )}
-
-                {/* Active Photo State: Thumbnail, Caption, Remove */}
-                {Boolean(activeSection.image_url) && (
-                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-2.5">
-                    <div className="flex items-center gap-3">
-                      {/* Photo Thumbnail */}
-                      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl border border-line bg-slate-100 shadow-2xs flex items-center justify-center text-slate-400">
-                        <PhotoIcon className="size-6 text-slate-300" />
-                        <img
-                          src={activeSection.image_url}
-                          alt="Section preview"
-                          className="absolute inset-0 size-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none'
-                          }}
-                        />
-                        {activeSection.photoMode === 'ai' && (
-                          <span className="absolute bottom-0 inset-x-0 bg-brand-600/90 text-[8px] font-bold text-white text-center py-0.5 tracking-wider uppercase">
-                            AI
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Caption Input with Remove in Label Row */}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[11px] font-semibold text-muted uppercase tracking-wider">
-                            Caption / Credit
-                          </label>
-                          <div className="flex items-center gap-2">
-                            {activeSection.photoMode === 'ai' && (
-                              <button
-                                type="button"
-                                onClick={handleExpand}
-                                disabled={generating || !fontMetricsReady}
-                                title="Regenerate photo via AI"
-                                className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-600 hover:text-brand-700 transition disabled:opacity-50"
-                              >
-                                <SparkleIcon className="size-3 text-brand-500" />
-                                <span>Refetch</span>
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={handleRemovePhoto}
-                              title="Remove photo and restore character capacity"
-                              className="inline-flex items-center gap-1 text-[11px] font-medium text-red-600 hover:text-red-700 transition"
-                            >
-                              <TrashIcon className="size-3" />
-                              <span>Remove</span>
-                            </button>
-                          </div>
-                        </div>
-                        <input
-                          value={activeSection.image_caption || ''}
-                          onChange={(e) =>
-                            editSection(activeKey, { image_caption: e.target.value })
-                          }
-                          placeholder="e.g., Photo: Staff Reporter"
-                          className="mt-1 w-full rounded-lg border border-line bg-slate-50/50 px-2.5 py-1.5 text-[13px] text-ink outline-none transition focus:border-brand-500 focus:bg-white"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Live Capacity Indicator */}
-                    <div className="flex items-center justify-between rounded-lg bg-brand-50/70 px-2.5 py-1.5 text-[11px] text-brand-900 border border-brand-100/60">
-                      <span className="font-semibold text-brand-950">
-                        Capacity: {charLimit} chars
-                      </span>
-                      <span className="font-medium text-brand-700">
-                        -{baseCharLimit - charLimit} chars for layout
-                      </span>
-                    </div>
-                  </div>
-                )}
+                {/* Sheet Body */}
+                <div className="scroll-subtle min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-3">
+                  {renderSectionEditor({ isMobile: true })}
+                </div>
               </div>
-
-              {/* Unified Body Text & Voice Dictation Input */}
-              <div className="mt-5 rounded-2xl border border-line bg-white p-4 transition-all focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/10 shadow-xs">
-                {/* Textarea for typing */}
-                <textarea
-                  value={activeSection.content}
-                  onChange={(e) =>
-                    editSection(activeKey, { content: e.target.value })
-                  }
-                  onBlur={(e) => {
-                    if (e.target.value.length <= charLimit) return
-                    const fitted = truncateAtSentenceBoundary(e.target.value, charLimit, editionLanguage)
-                    if (fitted) {
-                      editSection(activeKey, { content: fitted })
-                      setNotice('Text was limited at a complete sentence to fit the print capacity.')
-                    }
-                    else setNotice('No complete sentence fits this section. Shorten the copy or remove the photo.')
-                  }}
-                  placeholder="Type section body, or record voice below..."
-                  rows={8}
-                  aria-label={'Body text for ' + activeName}
-                  className="scroll-subtle h-[200px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-slate-400"
-                />
-                {activeSection.content.length > charLimit && (
-                  <p className="mt-2 text-[11px] leading-relaxed text-amber-700">
-                    This copy exceeds the estimated print capacity. On leaving the field, trailing
-                    text is kept only through a complete sentence; the PDF checks the actual layout.
-                  </p>
-                )}
-
-                {/* --- 1. ACTIVE RECORDING STATE --- */}
-                {speech.listening && (
-                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50/80 p-2.5 shadow-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      {/* Left: timer and compact waveform in single row */}
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="relative flex size-2.5 shrink-0">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                          <span className="relative inline-flex size-2.5 rounded-full bg-red-500" />
-                        </span>
-                        <span className="text-[14px] font-bold text-red-600 tabular-nums shrink-0">
-                          {speech.elapsed}
-                        </span>
-                        <Waveform
-                          bars={10}
-                          animated={speech.listening}
-                          level={mic.level}
-                          className="h-5 shrink-0"
-                          color="bg-red-500"
-                        />
-                      </div>
-
-                      {/* Right: Icon-only Cancel & Stop buttons in single row */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={handleDiscardVoice}
-                          title="Cancel recording"
-                          aria-label="Cancel recording"
-                          className="grid size-8 place-items-center rounded-lg border border-red-200 bg-white text-red-600 shadow-xs transition hover:bg-red-50 active:scale-95 shrink-0"
-                        >
-                          <TrashIcon className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleStopRecording}
-                          title="Stop recording"
-                          aria-label="Stop recording"
-                          className="grid size-8 place-items-center rounded-lg bg-red-600 text-white shadow-xs transition hover:bg-red-700 active:scale-95 shrink-0"
-                        >
-                          <StopIcon className="size-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Live speech transcript preview */}
-                    {(voiceDraft || speech.interim) && (
-                      <div className="mt-2 rounded-lg border border-red-100 bg-white/95 p-2.5 text-[13px] leading-relaxed text-navy-900 shadow-xs">
-                        <span>{voiceDraft} </span>
-                        {speech.interim && (
-                          <span className="text-red-500 italic opacity-85">{speech.interim}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* --- 2. REVIEW & DECIDE STATE (APPLY OR DELETE) --- */}
-                {!speech.listening && voiceDraft.trim().length > 0 && (
-                  <div className="mt-3 rounded-xl border border-brand-200 bg-brand-50/70 p-3 shadow-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 text-brand-900">
-                        <MicIcon className="size-4 text-brand-600" />
-                        <span className="text-[13px] font-bold tracking-wide">
-                          Recorded Voice
-                        </span>
-                      </div>
-                      <span className="text-[12px] font-medium text-muted">
-                        {voiceDraft.length} chars
-                      </span>
-                    </div>
-
-                    {/* Editable / viewable transcript */}
-                    <div className="mt-2">
-                      <textarea
-                        value={voiceDraft}
-                        onChange={(e) => setVoiceDraft(e.target.value)}
-                        rows={2}
-                        placeholder="Transcribed text..."
-                        className="w-full rounded-lg border border-brand-200 bg-white p-2.5 text-[14px] leading-relaxed text-navy-900 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20"
-                      />
-                    </div>
-
-                    {/* Action buttons: Delete or Apply */}
-                    <div className="mt-2.5 flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={handleDiscardVoice}
-                        title="Delete transcript"
-                        aria-label="Delete transcript"
-                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-rose-600 shadow-xs transition hover:bg-rose-50 active:scale-95"
-                      >
-                        <TrashIcon className="size-3.5" />
-                        <span>Delete</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleApplyVoice}
-                        title="Apply text to section"
-                        aria-label="Apply text to section"
-                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-xs transition hover:bg-emerald-700 active:scale-95"
-                      >
-                        <CheckIcon className="size-3.5" />
-                        <span>Apply</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* --- 3. IDLE BOTTOM ACTION BAR --- */}
-                {!speech.listening && !voiceDraft.trim() && (
-                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                    <div className="flex items-center gap-2 text-[13px] text-muted">
-                      <span className={activeSection.content.length >= charLimit ? 'font-semibold text-amber-600' : ''}>
-                        {activeSection.content.length}/{charLimit} chars
-                      </span>
-                    </div>
-
-                    {speech.supported ? (
-                      <button
-                        type="button"
-                        onClick={handleStartRecording}
-                        aria-label="Click to start voice recording"
-                        title="Click to start voice recording"
-                        className="grid size-9 place-items-center rounded-full bg-brand-500 text-white transition hover:bg-brand-600 active:scale-95 shadow-xs"
-                      >
-                        <MicIcon className="size-4.5" />
-                      </button>
-                    ) : (
-                      <span title="Voice dictation not supported in this browser" className="text-muted text-[13px] opacity-60 flex items-center gap-1.5">
-                        <MicIcon className="size-4" />
-                        <span>Voice not supported</span>
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {(speech.error || mic.error || notice) && (
-                <p role="alert" className="mt-3 rounded-lg bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-                  {speech.error || mic.error || notice}
-                </p>
-              )}
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={handleExpand}
-                  disabled={generating || !fontMetricsReady || !activeSection.content.trim()}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
-                >
-                  <SparkleIcon className="size-5" />
-                  {generating ? 'Working…' : 'Expand to fit'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleHeadline}
-                  disabled={generating || !activeSection.content.trim()}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-brand-500 py-3.5 text-[15px] font-semibold text-brand-600 transition hover:bg-brand-50 disabled:opacity-50"
-                >
-                  <SparkleIcon className="size-5" />
-                  Write headline
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={toggleComplete}
-                className={[
-                  'mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-[15px] font-semibold transition',
-                  activeSection.status === 'completed'
-                    ? 'border border-line bg-white text-ink hover:bg-navy-50'
-                    : 'bg-navy-900 text-white hover:bg-navy-700',
-                ].join(' ')}
-              >
-                <CheckIcon className="size-5" />
-                {activeSection.status === 'completed' ? 'Reopen as draft' : 'Mark section complete'}
-              </button>
-            </section>
-          </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

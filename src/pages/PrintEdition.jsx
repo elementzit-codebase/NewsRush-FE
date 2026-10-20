@@ -663,6 +663,11 @@ function Sheet({ page, pages, totalPages, edition, sections, capacityLanguage })
                 >
                   {title}
                 </h2>
+                {Boolean(section?.content_source) && (
+                  <p className="mt-0.5 text-[6.8pt] italic text-black/70 font-sans tracking-wide">
+                    {section.content_source}
+                  </p>
+                )}
                 <SectionBody
                   block={block}
                   section={section}

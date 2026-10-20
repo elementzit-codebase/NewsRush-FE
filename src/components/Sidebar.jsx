@@ -25,7 +25,12 @@ const NAV = [
  * - A sleek, sticky top navbar with a slide-over drawer on mobile (< md)
  * - A collapsible left icon/label rail on desktop (>= md)
  */
-export default function Sidebar({ variant = 'default' }) {
+export default function Sidebar({
+  variant = 'default',
+  mobileRightAction = null,
+  mobileSubtitle = null,
+  mobileBadge = null,
+}) {
   const { user, signOut } = useAuth()
   const items = NAV.filter((item) => !item.systemOnly || user?.is_system_user)
   const [signingOut, setSigningOut] = useState(false)
@@ -79,12 +84,12 @@ export default function Sidebar({ variant = 'default' }) {
     <>
       {/* ----------------- MOBILE TOP NAVBAR (Visible on < md) ----------------- */}
       <header className="sticky top-0 z-40 flex h-16 w-full shrink-0 items-center justify-between border-b border-line bg-white/95 px-4 backdrop-blur-md md:hidden">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation menu"
-            className="flex size-10 items-center justify-center rounded-xl border border-line bg-slate-50/70 text-slate-700 transition hover:bg-slate-100 hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand-500/20 active:scale-95"
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-line bg-slate-50/70 text-slate-700 transition hover:bg-slate-100 hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand-500/20 active:scale-95"
           >
             <MenuIcon className="size-5" />
           </button>
@@ -92,30 +97,41 @@ export default function Sidebar({ variant = 'default' }) {
           <Link
             to="/"
             aria-label="NewsRush Home"
-            className="flex items-center gap-2.5 overflow-hidden rounded-xl transition"
+            className="flex items-center gap-2.5 overflow-hidden rounded-xl transition min-w-0"
           >
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white shadow-xs">
               <NewspaperMarkIcon className="size-4.5" />
             </div>
             <div className="min-w-0">
-              <span className="block text-[15px] font-bold tracking-tight text-navy-900 leading-tight">
-                NewsRush
-              </span>
-              <span className="block text-[10px] font-medium text-muted leading-tight">
-                Edition Studio
+              <div className="flex items-center gap-1.5">
+                <span className="block text-[15px] font-bold tracking-tight text-navy-900 leading-tight">
+                  NewsRush
+                </span>
+                {mobileBadge && (
+                  <span className="inline-flex items-center rounded bg-brand-50 px-1.5 py-0.2 text-[10px] font-bold text-brand-600 uppercase border border-brand-200/60">
+                    {mobileBadge}
+                  </span>
+                )}
+              </div>
+              <span className="block truncate text-[10px] font-medium text-muted leading-tight">
+                {mobileSubtitle || 'Edition Studio'}
               </span>
             </div>
           </Link>
         </div>
 
-        {/* User profile avatar link */}
-        <Link
-          to="/profile"
-          className="flex items-center gap-2 rounded-xl p-1 transition hover:bg-slate-50"
-          title="Your profile"
-        >
-          <Avatar user={user} className="size-8 text-[12px]" />
-        </Link>
+        {/* Right side custom action or user profile avatar link */}
+        <div className="flex items-center gap-2 shrink-0">
+          {mobileRightAction || (
+            <Link
+              to="/profile"
+              className="flex items-center gap-2 rounded-xl p-1 transition hover:bg-slate-50"
+              title="Your profile"
+            >
+              <Avatar user={user} className="size-8 text-[12px]" />
+            </Link>
+          )}
+        </div>
       </header>
 
       {/* ----------------- MOBILE DRAWER / OVERLAY ----------------- */}

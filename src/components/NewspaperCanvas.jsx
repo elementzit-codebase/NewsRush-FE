@@ -54,28 +54,28 @@ function NewspaperCanvas({
 
   return (
     <div
-      className={`w-full max-w-full overflow-hidden rounded-2xl border border-line bg-white p-4 sm:p-6 shadow-[0_10px_40px_-30px_rgba(15,32,68,0.5)] ${
+      className={`w-full max-w-full overflow-hidden rounded-2xl border border-line bg-white p-3.5 sm:p-6 shadow-[0_10px_40px_-30px_rgba(15,32,68,0.5)] ${
         isMalayalam ? 'edition-malayalam' : 'edition-english'
       }`}
     >
       <header>
-        <div className="flex items-start justify-between gap-4 text-[13px] text-slate-500">
+        <div className="flex items-start justify-between gap-2 sm:gap-4 text-[11px] sm:text-[13px] text-slate-500">
           <span className="border-b border-slate-300 pb-1">{formatEditionDate(editionDate)}</span>
           <span className="border-b border-slate-300 pb-1">
             {editionLabel ? `${editionLabel} Edition` : 'Evening Edition'}
           </span>
         </div>
 
-        <h2 className="mt-3 text-center font-serif text-[clamp(32px,4.4vw,54px)] leading-none tracking-wide text-slate-400">
+        <h2 className="mt-3 text-center font-serif text-[clamp(28px,6vw,54px)] leading-none tracking-wide text-slate-400">
           {masthead}
         </h2>
 
-        <div className="mt-4 border-y border-slate-300 py-2 text-center text-[11px] tracking-[0.2em] text-slate-500">
+        <div className="mt-4 border-y border-slate-300 py-1.5 sm:py-2 text-center text-[10px] sm:text-[11px] tracking-[0.2em] text-slate-500">
           PAGE {page.page_number} — {page.name.toUpperCase()}
         </div>
       </header>
 
-      <div className="mt-5 grid w-full auto-rows-min grid-cols-[repeat(3,minmax(0,1fr))] gap-3 sm:gap-4">
+      <div className="mt-4 sm:mt-5 grid w-full auto-rows-min grid-cols-[repeat(3,minmax(0,1fr))] gap-2 sm:gap-4">
         {page.blocks.map((block, idx) => (
           <Block
             key={block.section_key}
@@ -178,6 +178,11 @@ function Block({ block, section, active, onSelect, isFirstSection, language = 'e
       {filled ? (
         <>
           <span className={TITLE_CLASS}>{title}</span>
+          {Boolean(section?.content_source) && (
+            <span className="mt-1 block text-[11px] font-sans italic text-slate-500">
+              {section.content_source}
+            </span>
+          )}
 
           {/* --- FIRST NEWS SECTION WITH PHOTO --- */}
           {hasPhoto && isFirstSection && (
@@ -369,8 +374,8 @@ function Block({ block, section, active, onSelect, isFirstSection, language = 'e
               <img src={section.image_url} alt="" className="size-full object-cover" />
             </div>
           )}
-          <span className="text-[15px] font-semibold text-brand-500">Add {label}</span>
-          <span className="mt-1 text-[13px] text-slate-500">Type or record to add content</span>
+          <span className="text-[13px] sm:text-[15px] font-semibold text-brand-500">Add {label}</span>
+          <span className="mt-0.5 text-[11px] sm:text-[13px] text-slate-500 leading-snug">Type or record to add content</span>
         </>
       )}
     </div>
