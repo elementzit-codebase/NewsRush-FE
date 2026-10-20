@@ -42,6 +42,7 @@ import {
   SUPPORTED_FORMATS_LABEL,
   validateArticleImageFile,
 } from '../lib/imageValidation'
+import { formatAiErrorMessage } from '../lib/aiErrors'
 
 const AUTOSAVE_MS = 2000
 
@@ -419,7 +420,6 @@ export default function CreateTask() {
       return
     }
     editSection(activeKey, { content: merged })
-    if (merged.length < rawMerged.length) setNotice('Voice text was limited at a complete sentence to fit the print capacity.')
     setVoiceDraft('')
   }
 
@@ -486,9 +486,6 @@ export default function CreateTask() {
         setNotice('The generated copy has no complete sentence within this section’s print capacity.')
         return
       }
-      if (expandedContent.length < cleanSectionContent(result.expanded_content).length) {
-        setNotice('Generated copy was limited at a complete sentence to fit the print capacity.')
-      }
       const generatedTitle = cleanSectionTitle(activeSection.title || result.generated_title || '', result.expanded_content)
       const updates = {
         content: expandedContent,
@@ -504,7 +501,7 @@ export default function CreateTask() {
       }
       editSection(activeKey, updates)
     } catch (err) {
-      setNotice(err.message)
+      setNotice(formatAiErrorMessage(err))
     } finally {
       setGenerating(false)
     }
@@ -584,7 +581,6 @@ export default function CreateTask() {
         let bestContent = originalContent
         let firstResult = null
         let photoResult = null
-        let wasLimited = false
 
         for (let attempt = 0; attempt < FILL_EXPANSION_PASSES; attempt += 1) {
           if (bestContent.length >= targetLength) break
@@ -610,15 +606,11 @@ export default function CreateTask() {
           if (fittedContent.length <= bestContent.length) break
 
           bestContent = fittedContent
-          wasLimited ||= fittedContent.length < generatedContent.length
           if (bestContent.length < targetLength && attempt < FILL_EXPANSION_PASSES - 1) {
             await wait(FILL_PACING_MS)
           }
         }
 
-        if (wasLimited) {
-          setNotice(`${candidate.section_name} was limited at a complete sentence to fit the print capacity.`)
-        }
         if (bestContent.length === originalContent.length && !(isAiPhoto && photoResult?.image_url)) {
           throw new Error('The AI did not add enough copy to fill this section.')
         }
@@ -649,7 +641,7 @@ export default function CreateTask() {
         }
       } catch (err) {
         // One bad section should not abandon the other eighteen.
-        failedFillRef.current.push(`${candidate.section_name} (${err.message})`)
+        failedFillRef.current.push(`${candidate.section_name} (${formatAiErrorMessage(err)})`)
       }
 
       setFill((state) => ({ ...state, done: index + 1, failed: [...failedFillRef.current] }))
@@ -676,7 +668,7 @@ export default function CreateTask() {
       })
       editSection(activeKey, { title: headline })
     } catch (err) {
-      setNotice(err.message)
+      setNotice(formatAiErrorMessage(err))
     } finally {
       setGenerating(false)
     }
@@ -1120,9 +1112,9 @@ export default function CreateTask() {
               const fitted = truncateAtSentenceBoundary(e.target.value, charLimit, editionLanguage)
               if (fitted) {
                 editSection(activeKey, { content: fitted })
-                setNotice('Text was limited at a complete sentence to fit the print capacity.')
+              } else {
+                setNotice('No complete sentence fits this section. Shorten the copy or remove the photo.')
               }
-              else setNotice('No complete sentence fits this section. Shorten the copy or remove the photo.')
             }}
             placeholder="Type section body, or record voice below..."
             rows={8}
@@ -1270,9 +1262,27 @@ export default function CreateTask() {
         </div>
 
         {(speech.error || mic.error || (!photoError && notice)) && (
-          <p role="alert" className="mt-3 rounded-lg bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-            {speech.error || mic.error || notice}
-          </p>
+          <div
+            role="alert"
+            className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-200/90 bg-amber-50/90 p-3 sm:p-3.5 text-[13px] text-amber-900 shadow-2xs"
+          >
+            <AlertTriangleIcon className="size-4 shrink-0 text-amber-600 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="leading-relaxed font-medium">
+                {speech.error || mic.error || notice}
+              </p>
+            </div>
+            {notice && (
+              <button
+                type="button"
+                onClick={() => setNotice('')}
+                aria-label="Dismiss message"
+                className="shrink-0 text-amber-600 hover:text-amber-900 p-0.5 rounded-md transition"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            )}
+          </div>
         )}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">

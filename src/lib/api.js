@@ -12,6 +12,8 @@
 
 export const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 
+import { formatAiErrorMessage } from './aiErrors'
+
 const ACCESS_KEY = 'newsrush.access_token'
 const REFRESH_KEY = 'newsrush.refresh_token'
 
@@ -299,23 +301,33 @@ export const saveSection = (editionId, section) =>
  * POST /api/ai/expand — grows a summary into a column-fitting article.
  * @returns {Promise<{expanded_content: string, generated_title: string}>}
  */
-export const expandContent = ({ summary, characterLimit, language, includePhoto }) =>
-  request('/api/ai/expand', {
-    method: 'POST',
-    body: {
-      summary,
-      character_limit: characterLimit,
-      ...(language ? { language } : {}),
-      ...(includePhoto !== undefined ? { include_photo: includePhoto } : {}),
-    },
-  })
+export const expandContent = async ({ summary, characterLimit, language, includePhoto }) => {
+  try {
+    return await request('/api/ai/expand', {
+      method: 'POST',
+      body: {
+        summary,
+        character_limit: characterLimit,
+        ...(language ? { language } : {}),
+        ...(includePhoto !== undefined ? { include_photo: includePhoto } : {}),
+      },
+    })
+  } catch (err) {
+    throw new Error(formatAiErrorMessage(err))
+  }
+}
 
 /**
  * POST /api/ai/headline — writes a headline for an existing body.
  * @returns {Promise<{headline: string}>}
  */
-export const generateHeadline = ({ content, language }) =>
-  request('/api/ai/headline', {
-    method: 'POST',
-    body: { content, ...(language ? { language } : {}) },
-  })
+export const generateHeadline = async ({ content, language }) => {
+  try {
+    return await request('/api/ai/headline', {
+      method: 'POST',
+      body: { content, ...(language ? { language } : {}) },
+    })
+  } catch (err) {
+    throw new Error(formatAiErrorMessage(err))
+  }
+}
