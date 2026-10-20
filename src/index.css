@@ -102,10 +102,9 @@ body {
   margin-bottom: 3mm;
 }
 
-/* A tabloid sheet is wider than most viewports; scale it down for preview
-   without touching the print output. */
-@media screen and (max-width: 1400px) {
-  .print-sheet { transform: scale(0.62); transform-origin: top center; margin-bottom: -140mm; }
+/* Preview scalers on screen */
+.sheet-preview-wrapper {
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Must match SHEET in data/printGeometry.js. @page only accepts static
@@ -120,6 +119,19 @@ body {
   .no-print { display: none !important; }
 
   html, body, #root { height: auto; background: #fff; }
+
+  .sheet-preview-wrapper,
+  .sheet-scaler,
+  .sheet-scaler > div {
+    width: auto !important;
+    height: auto !important;
+    transform: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
 
   .print-sheet {
     /* Any preview scaling must not follow the page onto paper. */
